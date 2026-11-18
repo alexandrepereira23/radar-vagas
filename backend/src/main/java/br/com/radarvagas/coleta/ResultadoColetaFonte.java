@@ -12,6 +12,38 @@ public record ResultadoColetaFonte(
 		Integer rateLimitRestante,
 		Instant rateLimitResetEm,
 		Instant maiorAtualizacaoObservada,
-		String erroResumido
+		String erroResumido,
+		boolean coletaIncompleta,
+		Integer proximaPaginaContinuacao,
+		Instant cursorJanelaInicio,
+		boolean falhaAutenticacao
 ) {
+
+	public ResultadoColetaFonte(
+			StatusExecucaoColeta status,
+			List<AnuncioExtraido> anunciosValidos,
+			int anunciosRecebidos,
+			int anunciosIgnorados,
+			int errosContagem,
+			Integer rateLimitRestante,
+			Instant rateLimitResetEm,
+			Instant maiorAtualizacaoObservada,
+			String erroResumido
+	) {
+		this(
+				status,
+				anunciosValidos,
+				anunciosRecebidos,
+				anunciosIgnorados,
+				errosContagem,
+				rateLimitRestante,
+				rateLimitResetEm,
+				maiorAtualizacaoObservada,
+				erroResumido,
+				false,
+				null,
+				null,
+				false
+		);
+	}
 }

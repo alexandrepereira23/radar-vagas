@@ -171,4 +171,83 @@ describe('AppComponent — Comportamento da Tela Inicial e Integração com API'
       temAnterior: true
     });
   });
+
+  it('deve exibir diagnóstico separando fonte validada, configurada sem validação, falha de chave e conector não implementado', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    httpMock.expectOne('/api/coletas/status').flush({
+      ultimaColetaSucessoGlobalEm: '2026-11-18T15:00:00Z',
+      dadosDesatualizados: true,
+      atualizacaoParcial: true,
+      motivoEstadoDados: 'Atualização parcial/degradada: 1 de 2 fonte(s) ativa(s) em dia; 1 com falha (Jooble Brasil).',
+      coletaEmAndamento: false,
+      fontes: [
+        {
+          id: 1,
+          fornecedor: 'GITHUB_ISSUES',
+          identificadorMural: 'backend-br/vagas',
+          nomeExibicao: 'Comunidade Backend Brasil',
+          ativo: true,
+          cadenciaMinutos: 360,
+          estadoValidacao: 'ATIVA_VALIDADA',
+          situacaoAtualizacao: 'ATUALIZADA',
+          ultimaColetaSucessoEm: '2026-11-18T15:00:00Z',
+          cursorUltimaAtualizacao: '2026-11-18T14:55:00Z'
+        },
+        {
+          id: 2,
+          fornecedor: 'JOOBLE_API',
+          identificadorMural: 'tecnologia-brasil',
+          nomeExibicao: 'Jooble Brasil',
+          ativo: true,
+          cadenciaMinutos: 360,
+          estadoValidacao: 'FALHA_AUTENTICACAO',
+          situacaoAtualizacao: 'COM_FALHA',
+          observacaoValidacao: 'Falha de autenticação/autorização (HTTP 403) ao consultar Jooble API.',
+          ultimaColetaSucessoEm: null,
+          cursorUltimaAtualizacao: null
+        },
+        {
+          id: 3,
+          fornecedor: 'JSEARCH_API',
+          identificadorMural: 'tecnologia-brasil',
+          nomeExibicao: 'JSearch / OpenWebNinja',
+          ativo: false,
+          cadenciaMinutos: 360,
+          estadoValidacao: 'NAO_IMPLEMENTADA',
+          situacaoAtualizacao: 'INATIVA',
+          observacaoValidacao: 'Conector ainda não implementado no código.',
+          ultimaColetaSucessoEm: null,
+          cursorUltimaAtualizacao: null
+        }
+      ],
+      ultimasExecucoes: []
+    });
+
+    httpMock.expectOne((r) => r.url === '/api/vagas').flush({
+      itens: [],
+      pagina: 0,
+      tamanhoPagina: 15,
+      totalElementos: 0,
+      totalPaginas: 0,
+      temProxima: false,
+      temAnterior: false
+    });
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const banner = el.querySelector('[data-testid="status-coleta-banner"]') as HTMLElement;
+    expect(banner.classList.contains('status-stale')).toBe(true);
+    expect(banner.textContent).toContain('Atualização parcial/degradada');
+
+    const btnDiag = el.querySelector('[data-testid="btn-diagnostico"]') as HTMLButtonElement;
+    btnDiag.click();
+    fixture.detectChanges();
+
+    const painel = el.querySelector('[data-testid="painel-diagnostico"]') as HTMLElement;
+    expect(painel.textContent).toContain('Validada por coleta');
+    expect(painel.textContent).toContain('Erro de autenticação/chave');
+    expect(painel.textContent).toContain('Conector não implementado');
+  });
 });

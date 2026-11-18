@@ -102,7 +102,7 @@ class ColetaECatalogoComportamentoTest {
 			chamadasHttp.incrementAndGet();
 			String path = exchange.getRequestURI().getPath();
 			String query = exchange.getRequestURI().getQuery();
-			int page = (query != null && query.contains("page=2")) ? 2 : 1;
+			int page = (query != null && query.contains("&page=2")) ? 2 : 1;
 
 			exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
 			exchange.getResponseHeaders().add("X-RateLimit-Remaining", rateLimitRemainingHeader.get());

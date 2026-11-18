@@ -67,7 +67,7 @@ public class OrquestradorColetaService {
 		// 1. Sincroniza repositórios configurados do GitHub Issues
 		List<RadarProperties.RepositorioConfig> repos = properties.getGithub().getRepositorios();
 		if (repos != null) {
-			boolean temToken = properties.getGithub().getToken() != null && !properties.getGithub().getToken().isBlank();
+			boolean temToken = possuiCredencialConfigurada(GitHubIssueClassificador.FORNECEDOR_GITHUB);
 			for (RadarProperties.RepositorioConfig repo : repos) {
 				if (repo.getIdentificador() == null || repo.getIdentificador().isBlank()) {
 					continue;
@@ -80,10 +80,10 @@ public class OrquestradorColetaService {
 						repo.isAtivo(),
 						repo.getCadenciaMinutos() > 0 ? repo.getCadenciaMinutos() : 360,
 						"COMUNIDADE",
-						repo.isAtivo() ? "ATIVA_VALIDADA" : "EXPERIMENTAL_ATIVAVEL",
+						repo.isAtivo() ? "CONFIGURADA_NAO_VALIDADA" : "EXPERIMENTAL_ATIVAVEL",
 						"API REST Oficial GitHub Issues (/repos/" + idMural + "/issues)",
 						temToken ? "GITHUB_TOKEN configurado (5000 req/h)" : "Opcional: GITHUB_TOKEN (sem token: 60 req/h)",
-						"Validado com coleta real na API do GitHub.",
+						"Fonte configurada; validação confirmada após coleta bem-sucedida.",
 						agora
 				);
 			}
@@ -96,35 +96,45 @@ public class OrquestradorColetaService {
 				if (fc.getFornecedor() == null || fc.getIdentificador() == null) {
 					continue;
 				}
+				String fornecedor = fc.getFornecedor().trim();
 				boolean ativoEfetivo = fc.isAtivo();
-				String estadoEfetivo = fc.getEstadoValidacao() != null ? fc.getEstadoValidacao() : "ATIVA_VALIDADA";
+				String estadoEfetivo = fc.getEstadoValidacao() != null ? fc.getEstadoValidacao() : "CONFIGURADA_NAO_VALIDADA";
 				String obsEfetiva = fc.getObservacaoValidacao();
+				String credNecessaria = fc.getCredencialNecessaria();
 
-				if (JoobleConector.FORNECEDOR.equals(fc.getFornecedor())) {
-					boolean temChave = properties.getJooble().getApiKey() != null && !properties.getJooble().getApiKey().isBlank();
+				if ("JSEARCH_API".equalsIgnoreCase(fornecedor)) {
+					ativoEfetivo = false;
+					estadoEfetivo = "NAO_IMPLEMENTADA";
+					credNecessaria = "Desnecessária nesta rodada (conector não implementado; não contratar plano)";
+					obsEfetiva = "Conector ainda não implementado no código. Preencher JSEARCH_API_KEY não ativa esta fonte.";
+				} else if (JoobleConector.FORNECEDOR.equals(fornecedor)) {
+					boolean temChave = possuiCredencialConfigurada(JoobleConector.FORNECEDOR);
 					if (temChave) {
 						ativoEfetivo = true;
-						estadoEfetivo = "ATIVA_VALIDADA";
-						obsEfetiva = "JOOBLE_API_KEY presente no ambiente.";
+						estadoEfetivo = "CONFIGURADA_NAO_VALIDADA";
+						obsEfetiva = "Credencial JOOBLE_API_KEY presente no ambiente; aguardando coleta com sucesso para confirmar validação.";
 					} else {
 						ativoEfetivo = false;
 						estadoEfetivo = "BLOQUEADA_CREDENCIAL";
+						obsEfetiva = "Conector implementado. Bloqueado até que a variável JOOBLE_API_KEY seja configurada.";
 					}
-				} else if (AdzunaConector.FORNECEDOR.equals(fc.getFornecedor())) {
-					boolean temChave = properties.getAdzuna().getAppId() != null && !properties.getAdzuna().getAppId().isBlank()
-							&& properties.getAdzuna().getAppKey() != null && !properties.getAdzuna().getAppKey().isBlank();
+				} else if (AdzunaConector.FORNECEDOR.equals(fornecedor)) {
+					boolean temChave = possuiCredencialConfigurada(AdzunaConector.FORNECEDOR);
 					if (temChave) {
 						ativoEfetivo = true;
-						estadoEfetivo = "ATIVA_VALIDADA";
-						obsEfetiva = "ADZUNA_APP_ID e ADZUNA_APP_KEY presentes no ambiente.";
+						estadoEfetivo = "CONFIGURADA_NAO_VALIDADA";
+						obsEfetiva = "Credenciais ADZUNA_APP_ID e ADZUNA_APP_KEY presentes no ambiente; aguardando coleta com sucesso para confirmar validação.";
 					} else {
 						ativoEfetivo = false;
 						estadoEfetivo = "BLOQUEADA_CREDENCIAL";
+						obsEfetiva = "Conector implementado. Bloqueado até que ADZUNA_APP_ID e ADZUNA_APP_KEY sejam configurados.";
 					}
+				} else if (ativoEfetivo && "ATIVA_VALIDADA".equalsIgnoreCase(estadoEfetivo)) {
+					estadoEfetivo = "CONFIGURADA_NAO_VALIDADA";
 				}
 
 				sincronizarConfiguracaoFonte(
-						fc.getFornecedor().trim(),
+						fornecedor,
 						fc.getIdentificador().trim(),
 						fc.getNomeExibicao() != null ? fc.getNomeExibicao() : fc.getIdentificador().trim(),
 						ativoEfetivo,
@@ -132,7 +142,7 @@ public class OrquestradorColetaService {
 						fc.getCategoria() != null ? fc.getCategoria() : "OUTRA",
 						estadoEfetivo,
 						fc.getMetodoAcesso(),
-						fc.getCredencialNecessaria(),
+						credNecessaria,
 						obsEfetiva,
 						agora
 				);
@@ -147,10 +157,10 @@ public class OrquestradorColetaService {
 			boolean ativo,
 			int cadenciaMinutos,
 			String categoria,
-			String estadoValidacao,
+			String estadoInicialConfiguracao,
 			String metodoAcesso,
 			String credencialNecessaria,
-			String observacaoValidacao,
+			String observacaoInicialConfiguracao,
 			Instant agora
 	) {
 		Optional<ConfiguracaoFonte> existente = configuracaoFonteRepository
@@ -168,12 +178,50 @@ public class OrquestradorColetaService {
 		cfg.setAtivo(ativo);
 		cfg.setCadenciaMinutos(cadenciaMinutos);
 		cfg.setCategoria(categoria);
-		cfg.setEstadoValidacao(estadoValidacao);
 		cfg.setMetodoAcesso(metodoAcesso);
 		cfg.setCredencialNecessaria(credencialNecessaria);
-		cfg.setObservacaoValidacao(observacaoValidacao);
+
+		// Preserva evidência persistida (validação real, erro de autenticação, rate limit ou falha de execução)
+		// sem resetar para validado em cada reinício
+		if (!ativo) {
+			cfg.setEstadoValidacao(estadoInicialConfiguracao);
+			cfg.setObservacaoValidacao(observacaoInicialConfiguracao);
+		} else if (existente.isPresent()) {
+			String estadoPersistido = cfg.getEstadoValidacao();
+			boolean temEvidenciaFalha = "FALHA_AUTENTICACAO".equalsIgnoreCase(estadoPersistido)
+					|| "FALHA_EXECUCAO".equalsIgnoreCase(estadoPersistido)
+					|| "LIMITE_ATINGIDO".equalsIgnoreCase(estadoPersistido);
+			boolean temEvidenciaSucesso = cfg.getUltimaColetaSucessoEm() != null
+					&& "ATIVA_VALIDADA".equalsIgnoreCase(estadoPersistido);
+
+			if (!temEvidenciaFalha && !temEvidenciaSucesso) {
+				cfg.setEstadoValidacao("CONFIGURADA_NAO_VALIDADA");
+				cfg.setObservacaoValidacao(observacaoInicialConfiguracao);
+			}
+		} else {
+			cfg.setEstadoValidacao(estadoInicialConfiguracao);
+			cfg.setObservacaoValidacao(observacaoInicialConfiguracao);
+		}
+
 		cfg.setAtualizadoEm(agora);
 		configuracaoFonteRepository.save(cfg);
+	}
+
+	public boolean possuiCredencialConfigurada(String fornecedor) {
+		if (fornecedor == null) {
+			return false;
+		}
+		return switch (fornecedor.trim().toUpperCase()) {
+			case GitHubIssueClassificador.FORNECEDOR_GITHUB ->
+					properties.getGithub().getToken() != null && !properties.getGithub().getToken().isBlank();
+			case JoobleConector.FORNECEDOR ->
+					properties.getJooble().getApiKey() != null && !properties.getJooble().getApiKey().isBlank();
+			case AdzunaConector.FORNECEDOR ->
+					properties.getAdzuna().getAppId() != null && !properties.getAdzuna().getAppId().isBlank()
+							&& properties.getAdzuna().getAppKey() != null && !properties.getAdzuna().getAppKey().isBlank();
+			case "JSEARCH_API" -> false;
+			default -> true;
+		};
 	}
 
 	public List<ExecucaoColetaDto> executarFontesAtivas() {
@@ -196,7 +244,9 @@ public class OrquestradorColetaService {
 
 		for (ConfiguracaoFonte fonte : ativas) {
 			Instant ultima = fonte.getUltimaColetaSucessoEm();
-			boolean vencida = (ultima == null)
+			boolean temContinuacaoPendente = fonte.getPaginaContinuacao() != null && fonte.getPaginaContinuacao() > 1;
+			boolean vencida = temContinuacaoPendente
+					|| (ultima == null)
 					|| Duration.between(ultima, agora).toMinutes() >= Math.max(1, fonte.getCadenciaMinutos());
 			if (vencida) {
 				executadas.add(executarFonte(fonte));
@@ -222,6 +272,20 @@ public class OrquestradorColetaService {
 			return mapearExecucaoDto(execucaoColetaRepository.save(bloqueada));
 		}
 
+		if ("NAO_IMPLEMENTADA".equalsIgnoreCase(fonte.getEstadoValidacao())
+				|| "JSEARCH_API".equalsIgnoreCase(fonte.getFornecedor())) {
+			ExecucaoColeta naoImpl = new ExecucaoColeta();
+			naoImpl.setFornecedor(fonte.getFornecedor());
+			naoImpl.setIdentificadorMural(fonte.getIdentificadorMural());
+			naoImpl.setStatus(StatusExecucaoColeta.NAO_IMPLEMENTADA);
+			naoImpl.setIniciadoEm(inicio);
+			naoImpl.setFinalizadoEm(inicio);
+			naoImpl.setErroResumido(fonte.getObservacaoValidacao() != null
+					? fonte.getObservacaoValidacao()
+					: "Conector ainda não implementado para o fornecedor: " + fonte.getFornecedor());
+			return mapearExecucaoDto(execucaoColetaRepository.save(naoImpl));
+		}
+
 		if (!fontesEmExecucao.add(chaveLock)) {
 			ExecucaoColeta ignorada = new ExecucaoColeta();
 			ignorada.setFornecedor(fonte.getFornecedor());
@@ -244,14 +308,18 @@ public class OrquestradorColetaService {
 			ConectorFonteVagas conector = conectoresPorFornecedor.get(fonte.getFornecedor());
 			if (conector == null) {
 				boolean ehBloqueioCredencial = "BLOQUEADA_CREDENCIAL".equalsIgnoreCase(fonte.getEstadoValidacao());
-				execucao.setStatus(ehBloqueioCredencial ? StatusExecucaoColeta.BLOQUEADA_CREDENCIAL : StatusExecucaoColeta.FALHA);
+				execucao.setStatus(ehBloqueioCredencial ? StatusExecucaoColeta.BLOQUEADA_CREDENCIAL : StatusExecucaoColeta.NAO_IMPLEMENTADA);
 				execucao.setFinalizadoEm(Instant.now(clock));
-				execucao.setErrosContagem(ehBloqueioCredencial ? 0 : 1);
+				execucao.setErrosContagem(0);
 				execucao.setErroResumido(fonte.getObservacaoValidacao() != null
 						? fonte.getObservacaoValidacao()
-						: "Nenhum conector ativo para o fornecedor: " + fonte.getFornecedor());
+						: "Conector não implementado para o fornecedor: " + fonte.getFornecedor());
 				return mapearExecucaoDto(execucaoColetaRepository.save(execucao));
 			}
+
+			int paginaAntesDaExecucao = (fonte.getPaginaContinuacao() != null && fonte.getPaginaContinuacao() > 1)
+					? fonte.getPaginaContinuacao()
+					: 1;
 
 			ResultadoColetaFonte resultado = conector.coletar(fonte);
 
@@ -274,7 +342,7 @@ public class OrquestradorColetaService {
 					errosPersistencia++;
 					ultimoErroPersistencia = SanitizadorConteudo.sanitizarMensagemErro(
 							"Erro ao persistir anúncio #" + anuncio.identificadorExterno() + ": " + ex.getMessage(),
-							properties.getGithub().getToken()
+							todosSegredosConfigurados()
 					);
 					log.warn("Erro ao persistir anúncio {} de {}: {}",
 							anuncio.identificadorExterno(),
@@ -286,7 +354,7 @@ public class OrquestradorColetaService {
 			Instant fim = Instant.now(clock);
 			int totalErros = resultado.errosContagem() + errosPersistencia;
 			StatusExecucaoColeta statusFinal = resultado.status();
-			if (errosPersistencia > 0 && statusFinal == StatusExecucaoColeta.SUCESSO) {
+			if (errosPersistencia > 0 && (statusFinal == StatusExecucaoColeta.SUCESSO || statusFinal == StatusExecucaoColeta.SUCESSO_PARCIAL)) {
 				statusFinal = (novos + atualizados + repetidos) > 0
 						? StatusExecucaoColeta.SUCESSO_PARCIAL
 						: StatusExecucaoColeta.FALHA;
@@ -308,29 +376,101 @@ public class OrquestradorColetaService {
 			execucao.setErroResumido(erroFinal);
 			execucao = execucaoColetaRepository.save(execucao);
 
-			if (statusFinal == StatusExecucaoColeta.SUCESSO || statusFinal == StatusExecucaoColeta.SUCESSO_PARCIAL) {
-				fonte.setUltimaColetaSucessoEm(fim);
-				if (statusFinal == StatusExecucaoColeta.SUCESSO && resultado.maiorAtualizacaoObservada() != null) {
-					fonte.setCursorUltimaAtualizacao(resultado.maiorAtualizacaoObservada());
-				}
-				fonte.setAtualizadoEm(fim);
-				configuracaoFonteRepository.save(fonte);
-			}
+			atualizarEstadoECursorDaFonte(
+					fonte,
+					resultado,
+					statusFinal,
+					errosPersistencia,
+					paginaAntesDaExecucao,
+					erroFinal,
+					fim
+			);
 
 			return mapearExecucaoDto(execucao);
 		} catch (Exception ex) {
 			Instant fim = Instant.now(clock);
+			String erroSanitizado = SanitizadorConteudo.sanitizarMensagemErro(
+					"Falha inesperada na execução da coleta: " + ex.getMessage(),
+					todosSegredosConfigurados()
+			);
 			execucao.setStatus(StatusExecucaoColeta.FALHA);
 			execucao.setFinalizadoEm(fim);
 			execucao.setErrosContagem(execucao.getErrosContagem() + 1);
-			execucao.setErroResumido(SanitizadorConteudo.sanitizarMensagemErro(
-					"Falha inesperada na execução da coleta: " + ex.getMessage(),
-					properties.getGithub().getToken()
-			));
-			return mapearExecucaoDto(execucaoColetaRepository.save(execucao));
+			execucao.setErroResumido(erroSanitizado);
+			execucao = execucaoColetaRepository.save(execucao);
+
+			fonte.setEstadoValidacao("FALHA_EXECUCAO");
+			fonte.setObservacaoValidacao(erroSanitizado);
+			fonte.setAtualizadoEm(fim);
+			configuracaoFonteRepository.save(fonte);
+
+			return mapearExecucaoDto(execucao);
 		} finally {
 			fontesEmExecucao.remove(chaveLock);
 		}
+	}
+
+	private void atualizarEstadoECursorDaFonte(
+			ConfiguracaoFonte fonte,
+			ResultadoColetaFonte resultado,
+			StatusExecucaoColeta statusFinal,
+			int errosPersistencia,
+			int paginaAntesDaExecucao,
+			String erroFinal,
+			Instant fim
+	) {
+		Instant maiorObservadaAcumulada = maxInstant(
+				fonte.getMaiorAtualizacaoJanela(),
+				resultado.maiorAtualizacaoObservada()
+		);
+
+		if (statusFinal == StatusExecucaoColeta.SUCESSO || statusFinal == StatusExecucaoColeta.SUCESSO_PARCIAL) {
+			fonte.setUltimaColetaSucessoEm(fim);
+			fonte.setEstadoValidacao("ATIVA_VALIDADA");
+
+			if (errosPersistencia > 0) {
+				// Se houve erro ao persistir item desta página, mantém a página atual para reexecução idempotente
+				fonte.setPaginaContinuacao(paginaAntesDaExecucao);
+				fonte.setCursorJanelaAtual(resultado.cursorJanelaInicio());
+				fonte.setMaiorAtualizacaoJanela(maiorObservadaAcumulada);
+			} else if (resultado.coletaIncompleta() && resultado.proximaPaginaContinuacao() != null) {
+				// Coleta truncada por limite de páginas/volume: salva continuação sem avançar cursorUltimaAtualizacao!
+				fonte.setPaginaContinuacao(resultado.proximaPaginaContinuacao());
+				fonte.setCursorJanelaAtual(resultado.cursorJanelaInicio());
+				fonte.setMaiorAtualizacaoJanela(maiorObservadaAcumulada);
+			} else if (statusFinal == StatusExecucaoColeta.SUCESSO && !resultado.coletaIncompleta()) {
+				// Janela concluída integralmente sem truncamento e sem erros de persistência: avança cursor!
+				if (maiorObservadaAcumulada != null) {
+					fonte.setCursorUltimaAtualizacao(maiorObservadaAcumulada);
+				}
+				fonte.setPaginaContinuacao(null);
+				fonte.setCursorJanelaAtual(null);
+				fonte.setMaiorAtualizacaoJanela(null);
+			}
+
+			fonte.setObservacaoValidacao(erroFinal != null
+					? erroFinal
+					: "Coleta validada com sucesso (" + resultado.anunciosRecebidos() + " recebido(s), "
+							+ resultado.anunciosValidos().size() + " válido(s)).");
+		} else if (statusFinal == StatusExecucaoColeta.BLOQUEADA_CREDENCIAL) {
+			fonte.setEstadoValidacao("BLOQUEADA_CREDENCIAL");
+			if (erroFinal != null) {
+				fonte.setObservacaoValidacao(erroFinal);
+			}
+		} else if (statusFinal == StatusExecucaoColeta.LIMITE_ATINGIDO) {
+			fonte.setEstadoValidacao("LIMITE_ATINGIDO");
+			if (erroFinal != null) {
+				fonte.setObservacaoValidacao(erroFinal);
+			}
+		} else if (statusFinal == StatusExecucaoColeta.FALHA) {
+			fonte.setEstadoValidacao(resultado.falhaAutenticacao() ? "FALHA_AUTENTICACAO" : "FALHA_EXECUCAO");
+			if (erroFinal != null) {
+				fonte.setObservacaoValidacao(erroFinal);
+			}
+		}
+
+		fonte.setAtualizadoEm(fim);
+		configuracaoFonteRepository.save(fonte);
 	}
 
 	public StatusColetaGlobalDto consultarStatusGlobal() {
@@ -345,41 +485,154 @@ public class OrquestradorColetaService {
 				.max(Instant::compareTo)
 				.orElse(null);
 
-		int limiteHoras = Math.max(1, properties.getColeta().getDesatualizadoAposHoras());
-		boolean desatualizados;
-		String motivoEstado;
+		int limiteHorasGlobal = Math.max(1, properties.getColeta().getDesatualizadoAposHoras());
 
-		if (ultimaGlobal == null) {
-			desatualizados = true;
-			motivoEstado = "Nenhuma coleta concluída ainda. Clique em 'Coletar agora' para buscar vagas nas fontes ativas.";
-		} else {
-			long horasDesdeUltima = Duration.between(ultimaGlobal, agora).toHours();
-			if (horasDesdeUltima >= limiteHoras) {
-				desatualizados = true;
-				motivoEstado = "Dados coletados há " + horasDesdeUltima + " hora(s) (acima do limite de " + limiteHoras + "h).";
+		int fontesAtivasTotal = 0;
+		int fontesAtualizadas = 0;
+		int fontesParciais = 0;
+		int fontesComFalha = 0;
+		int fontesDesatualizadas = 0;
+		List<String> nomesComFalha = new ArrayList<>();
+		List<String> nomesDesatualizadas = new ArrayList<>();
+		List<String> nomesParciais = new ArrayList<>();
+
+		List<FonteConfiguradaDto> fontesDto = new ArrayList<>();
+
+		for (ConfiguracaoFonte f : fontes) {
+			Optional<ExecucaoColeta> ultimaExecOpt = execucaoColetaRepository
+					.findFirstByFornecedorAndIdentificadorMuralOrderByIniciadoEmDesc(
+							f.getFornecedor(),
+							f.getIdentificadorMural()
+					);
+
+			String ultimoStatusExec = ultimaExecOpt.map(e -> e.getStatus().name()).orElse(null);
+			String ultimoErroExec = ultimaExecOpt.map(ExecucaoColeta::getErroResumido).orElse(null);
+			boolean credConfigurada = possuiCredencialConfigurada(f.getFornecedor());
+
+			String situacaoFonte;
+			boolean fonteDesatualizada;
+
+			if (!f.isAtivo()) {
+				situacaoFonte = "INATIVA";
+				fonteDesatualizada = false;
 			} else {
-				desatualizados = false;
-				motivoEstado = "Catálogo atualizado a partir do banco local com múltiplas fontes ativas.";
+				fontesAtivasTotal++;
+				boolean estadoIndicaFalha = "FALHA_AUTENTICACAO".equalsIgnoreCase(f.getEstadoValidacao())
+						|| "FALHA_EXECUCAO".equalsIgnoreCase(f.getEstadoValidacao())
+						|| "LIMITE_ATINGIDO".equalsIgnoreCase(f.getEstadoValidacao());
+				boolean ultimaExecFalhou = ultimaExecOpt.isPresent() && (
+						ultimaExecOpt.get().getStatus() == StatusExecucaoColeta.FALHA
+						|| ultimaExecOpt.get().getStatus() == StatusExecucaoColeta.LIMITE_ATINGIDO
+						|| ultimaExecOpt.get().getStatus() == StatusExecucaoColeta.BLOQUEADA_CREDENCIAL
+						|| ultimaExecOpt.get().getStatus() == StatusExecucaoColeta.BLOQUEADA_ACESSO
+				);
+
+				if (estadoIndicaFalha || ultimaExecFalhou) {
+					situacaoFonte = "COM_FALHA";
+					fonteDesatualizada = true;
+					fontesComFalha++;
+					nomesComFalha.add(f.getNomeExibicao());
+				} else if (f.getUltimaColetaSucessoEm() == null) {
+					situacaoFonte = "NUNCA_COLETADA";
+					fonteDesatualizada = true;
+					fontesDesatualizadas++;
+					nomesDesatualizadas.add(f.getNomeExibicao());
+				} else {
+					long minutosDesdeSucesso = Duration.between(f.getUltimaColetaSucessoEm(), agora).toMinutes();
+					long limiteMinutosFonte = Math.min(
+							limiteHorasGlobal * 60L,
+							Math.max(60L, (long) f.getCadenciaMinutos() * 2L)
+					);
+					boolean temContinuacao = f.getPaginaContinuacao() != null && f.getPaginaContinuacao() > 1;
+					boolean ultimaFoiParcial = ultimaExecOpt.isPresent()
+							&& ultimaExecOpt.get().getStatus() == StatusExecucaoColeta.SUCESSO_PARCIAL;
+
+					if (minutosDesdeSucesso >= limiteMinutosFonte) {
+						situacaoFonte = "DESATUALIZADA";
+						fonteDesatualizada = true;
+						fontesDesatualizadas++;
+						nomesDesatualizadas.add(f.getNomeExibicao());
+					} else if (temContinuacao || ultimaFoiParcial) {
+						situacaoFonte = "ATUALIZACAO_PARCIAL";
+						fonteDesatualizada = false;
+						fontesParciais++;
+						nomesParciais.add(f.getNomeExibicao());
+					} else {
+						situacaoFonte = "ATUALIZADA";
+						fonteDesatualizada = false;
+						fontesAtualizadas++;
+					}
+				}
 			}
+
+			fontesDto.add(new FonteConfiguradaDto(
+					f.getId(),
+					f.getFornecedor(),
+					f.getIdentificadorMural(),
+					f.getNomeExibicao(),
+					f.isAtivo(),
+					f.getCadenciaMinutos(),
+					f.getCategoria(),
+					f.getEstadoValidacao(),
+					f.getMetodoAcesso(),
+					f.getCredencialNecessaria(),
+					f.getObservacaoValidacao(),
+					f.getUltimaColetaSucessoEm(),
+					f.getCursorUltimaAtualizacao(),
+					credConfigurada,
+					situacaoFonte,
+					fonteDesatualizada,
+					ultimoStatusExec,
+					ultimoErroExec,
+					f.getPaginaContinuacao()
+			));
 		}
 
-		List<FonteConfiguradaDto> fontesDto = fontes.stream()
-				.map(f -> new FonteConfiguradaDto(
-						f.getId(),
-						f.getFornecedor(),
-						f.getIdentificadorMural(),
-						f.getNomeExibicao(),
-						f.isAtivo(),
-						f.getCadenciaMinutos(),
-						f.getCategoria(),
-						f.getEstadoValidacao(),
-						f.getMetodoAcesso(),
-						f.getCredencialNecessaria(),
-						f.getObservacaoValidacao(),
-						f.getUltimaColetaSucessoEm(),
-						f.getCursorUltimaAtualizacao()
-				))
-				.toList();
+		boolean desatualizados;
+		boolean atualizacaoParcial;
+		String motivoEstado;
+
+		if (fontesAtivasTotal == 0) {
+			desatualizados = true;
+			atualizacaoParcial = false;
+			motivoEstado = "Nenhuma fonte ativa configurada no catálogo.";
+		} else if (ultimaGlobal == null) {
+			desatualizados = true;
+			atualizacaoParcial = false;
+			if (fontesComFalha > 0) {
+				motivoEstado = "Nenhuma coleta concluída com sucesso (" + fontesComFalha
+						+ " fonte(s) ativa(s) com falha: " + resumirNomes(nomesComFalha) + ").";
+			} else {
+				motivoEstado = "Nenhuma coleta concluída ainda. Clique em 'Coletar agora' para buscar vagas nas fontes ativas.";
+			}
+		} else if (fontesComFalha > 0 || fontesDesatualizadas > 0) {
+			int emDia = fontesAtualizadas + fontesParciais;
+			desatualizados = true;
+			atualizacaoParcial = emDia > 0;
+			List<String> partes = new ArrayList<>();
+			if (fontesComFalha > 0) {
+				partes.add(fontesComFalha + " com falha (" + resumirNomes(nomesComFalha) + ")");
+			}
+			if (fontesDesatualizadas > 0) {
+				partes.add(fontesDesatualizadas + " desatualizada(s)/sem coleta (" + resumirNomes(nomesDesatualizadas) + ")");
+			}
+			if (fontesParciais > 0) {
+				partes.add(fontesParciais + " com coleta parcial (" + resumirNomes(nomesParciais) + ")");
+			}
+			motivoEstado = "Atualização parcial/degradada: " + emDia + " de " + fontesAtivasTotal
+					+ " fonte(s) ativa(s) em dia; " + String.join(", ", partes) + ".";
+		} else if (fontesParciais > 0) {
+			desatualizados = false;
+			atualizacaoParcial = true;
+			motivoEstado = "Atualização parcial: " + fontesParciais + " de " + fontesAtivasTotal
+					+ " fonte(s) ativa(s) com coleta parcial ou paginação pendente de continuação ("
+					+ resumirNomes(nomesParciais) + ").";
+		} else {
+			desatualizados = false;
+			atualizacaoParcial = false;
+			motivoEstado = "Catálogo atualizado: todas as " + fontesAtivasTotal
+					+ " fonte(s) ativa(s) coletadas com sucesso dentro da cadência.";
+		}
 
 		List<ExecucaoColetaDto> execucoesDto = execucoes.stream()
 				.map(this::mapearExecucaoDto)
@@ -391,8 +644,43 @@ public class OrquestradorColetaService {
 				motivoEstado,
 				!fontesEmExecucao.isEmpty(),
 				fontesDto,
-				execucoesDto
+				execucoesDto,
+				atualizacaoParcial,
+				fontesAtivasTotal,
+				fontesAtualizadas,
+				fontesComFalha,
+				fontesDesatualizadas,
+				fontesParciais
 		);
+	}
+
+	private String resumirNomes(List<String> nomes) {
+		if (nomes == null || nomes.isEmpty()) {
+			return "";
+		}
+		if (nomes.size() <= 3) {
+			return String.join(", ", nomes);
+		}
+		return String.join(", ", nomes.subList(0, 3)) + " e +" + (nomes.size() - 3);
+	}
+
+	private Instant maxInstant(Instant a, Instant b) {
+		if (a == null) {
+			return b;
+		}
+		if (b == null) {
+			return a;
+		}
+		return a.isAfter(b) ? a : b;
+	}
+
+	private String[] todosSegredosConfigurados() {
+		return new String[]{
+				properties.getGithub().getToken(),
+				properties.getJooble().getApiKey(),
+				properties.getAdzuna().getAppId(),
+				properties.getAdzuna().getAppKey()
+		};
 	}
 
 	private ExecucaoColetaDto mapearExecucaoDto(ExecucaoColeta e) {

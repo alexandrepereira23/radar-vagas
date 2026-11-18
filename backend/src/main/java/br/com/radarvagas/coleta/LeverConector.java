@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -58,7 +59,7 @@ public class LeverConector implements ConectorFonteVagas {
 		String url = base + "/v0/postings/" + site + "?mode=json";
 		int maxItens = Math.max(1, properties.getLever().getMaxItensPorMural());
 
-		List<AnuncioExtraido> validos = new ArrayList<>();
+		List<AnuncioExtraido> todosValidos = new ArrayList<>();
 		int recebidos = 0;
 		int ignorados = 0;
 		int erros = 0;
@@ -104,10 +105,16 @@ public class LeverConector implements ConectorFonteVagas {
 				);
 			}
 
-			for (JsonNode item : raiz) {
-				if (validos.size() >= maxItens) {
-					break;
-				}
+			List<JsonNode> itensOrdenados = new ArrayList<>();
+			raiz.forEach(itensOrdenados::add);
+			itensOrdenados.sort(Comparator.comparing(
+					(JsonNode n) -> (n.hasNonNull("createdAt") && n.get("createdAt").isNumber())
+							? Instant.ofEpochMilli(n.get("createdAt").asLong())
+							: null,
+					Comparator.nullsLast(Comparator.reverseOrder())
+			));
+
+			for (JsonNode item : itensOrdenados) {
 				recebidos++;
 				try {
 					String idExterno = textoOuNulo(item, "id");
@@ -167,26 +174,54 @@ public class LeverConector implements ConectorFonteVagas {
 					);
 
 					if (extraido.isPresent()) {
-						validos.add(extraido.get());
+						todosValidos.add(extraido.get());
 					} else {
 						ignorados++;
 					}
 				} catch (Exception itemEx) {
 					erros++;
-					erroResumido = SanitizadorConteudo.sanitizarMensagemErro(itemEx.getMessage(), null);
+					erroResumido = SanitizadorConteudo.sanitizarMensagemErro(itemEx.getMessage());
 				}
 			}
 		} catch (Exception ex) {
 			erros++;
 			erroResumido = SanitizadorConteudo.sanitizarMensagemErro(
-					"Erro ao consultar Lever (" + site + "): " + ex.getMessage(),
-					null
+					"Erro ao consultar Lever (" + site + "): " + ex.getMessage()
 			);
 		}
 
-		StatusExecucaoColeta status = erros > 0
-				? (recebidos > 0 ? StatusExecucaoColeta.SUCESSO_PARCIAL : StatusExecucaoColeta.FALHA)
-				: StatusExecucaoColeta.SUCESSO;
+		int bloco = (configuracao.getPaginaContinuacao() != null && configuracao.getPaginaContinuacao() > 1)
+				? configuracao.getPaginaContinuacao()
+				: 1;
+		List<AnuncioExtraido> validos = todosValidos;
+		boolean coletaIncompleta = false;
+		Integer proximaPagina = null;
+		if (todosValidos.size() > maxItens) {
+			int inicio = (bloco - 1) * maxItens;
+			if (inicio >= todosValidos.size()) {
+				bloco = 1;
+				inicio = 0;
+			}
+			int fim = Math.min(inicio + maxItens, todosValidos.size());
+			validos = new ArrayList<>(todosValidos.subList(inicio, fim));
+			if (fim < todosValidos.size()) {
+				coletaIncompleta = true;
+				proximaPagina = bloco + 1;
+				if (erroResumido == null) {
+					erroResumido = "Recorte por limite de volume: importadas " + validos.size() + " de "
+							+ todosValidos.size() + " vagas válidas (bloco " + bloco + "); continuação no bloco " + proximaPagina + ".";
+				}
+			}
+		}
+
+		StatusExecucaoColeta status;
+		if (erros > 0) {
+			status = validos.isEmpty() ? StatusExecucaoColeta.FALHA : StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else if (coletaIncompleta) {
+			status = StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else {
+			status = StatusExecucaoColeta.SUCESSO;
+		}
 
 		return new ResultadoColetaFonte(
 				status,
@@ -197,7 +232,11 @@ public class LeverConector implements ConectorFonteVagas {
 				null,
 				null,
 				maiorPublicacao,
-				erroResumido
+				erroResumido,
+				coletaIncompleta,
+				proximaPagina,
+				null,
+				false
 		);
 	}
 

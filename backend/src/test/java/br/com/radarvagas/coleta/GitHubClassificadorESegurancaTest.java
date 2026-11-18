@@ -118,4 +118,19 @@ class GitHubClassificadorESegurancaTest {
 		assertThat(SanitizadorConteudo.validarENormalizarUrlPublica("http://172.20.0.5/vaga")).isNull();
 		assertThat(SanitizadorConteudo.validarENormalizarUrlPublica("javascript:alert(1)")).isNull();
 	}
+
+	@Test
+	void devePreservarUrlCodificadaSemDuplaCodificacaoEManterIdempotenciaAposNormalizacaoRepetida() {
+		String urlOriginal = "https://empresa.example/jobs/123?redirect=a%2Fb&utm_source=teste";
+
+		String norm1 = SanitizadorConteudo.validarENormalizarUrlPublica(urlOriginal);
+		assertThat(norm1).isEqualTo("https://empresa.example/jobs/123?redirect=a%2Fb");
+		assertThat(norm1).doesNotContain("%252F");
+		assertThat(norm1).doesNotContain("utm_source");
+
+		String norm2 = SanitizadorConteudo.validarENormalizarUrlPublica(norm1);
+		String norm3 = SanitizadorConteudo.validarENormalizarUrlPublica(norm2);
+		assertThat(norm2).isEqualTo(norm1);
+		assertThat(norm3).isEqualTo(norm1);
+	}
 }

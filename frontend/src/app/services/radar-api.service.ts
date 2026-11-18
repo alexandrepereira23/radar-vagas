@@ -46,4 +46,8 @@ export class RadarApiService {
   executarColetaManual(): Observable<ExecucaoColeta[]> {
     return this.http.post<ExecucaoColeta[]>(`${this.apiUrl}/coletas/executar`, {});
   }
+
+  executarFonteIndividual(idFonte: number): Observable<ExecucaoColeta> {
+    return this.http.post<ExecucaoColeta>(`${this.apiUrl}/coletas/executar/${idFonte}`, {});
+  }
 }

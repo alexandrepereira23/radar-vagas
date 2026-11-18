@@ -15,6 +15,12 @@ public record FonteConfiguradaDto(
 		String credencialNecessaria,
 		String observacaoValidacao,
 		Instant ultimaColetaSucessoEm,
-		Instant cursorUltimaAtualizacao
+		Instant cursorUltimaAtualizacao,
+		boolean credencialConfigurada,
+		String situacaoAtualizacao,
+		boolean desatualizada,
+		String ultimoStatusExecucao,
+		String ultimoErroResumido,
+		Integer paginaContinuacao
 ) {
 }

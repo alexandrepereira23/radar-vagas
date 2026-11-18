@@ -266,7 +266,16 @@ public class RadarProperties {
 	public static class Gupy {
 		private String portalBaseUrl = "https://portal.gupy.io";
 		private int maxItensPorBusca = 20;
+		private int maxPaginasPorExecucao = 2;
 		private int timeoutSegundos = 15;
+		private List<String> termosBusca = new ArrayList<>(List.of(
+				"desenvolvedor",
+				"qa",
+				"dados",
+				"devops",
+				"seguranca",
+				"estagio"
+		));
 
 		public String getPortalBaseUrl() {
 			return portalBaseUrl;
@@ -284,12 +293,28 @@ public class RadarProperties {
 			this.maxItensPorBusca = maxItensPorBusca;
 		}
 
+		public int getMaxPaginasPorExecucao() {
+			return maxPaginasPorExecucao;
+		}
+
+		public void setMaxPaginasPorExecucao(int maxPaginasPorExecucao) {
+			this.maxPaginasPorExecucao = maxPaginasPorExecucao;
+		}
+
 		public int getTimeoutSegundos() {
 			return timeoutSegundos;
 		}
 
 		public void setTimeoutSegundos(int timeoutSegundos) {
 			this.timeoutSegundos = timeoutSegundos;
+		}
+
+		public List<String> getTermosBusca() {
+			return termosBusca;
+		}
+
+		public void setTermosBusca(List<String> termosBusca) {
+			this.termosBusca = termosBusca;
 		}
 	}
 
@@ -356,8 +381,18 @@ public class RadarProperties {
 	public static class Jooble {
 		private String apiBaseUrl = "https://br.jooble.org";
 		private String apiKey = "";
+		private String localizacao = "Brasil";
 		private int maxItensPorBusca = 20;
+		private int maxTermosPorExecucao = 3;
 		private int timeoutSegundos = 15;
+		private List<String> termosBusca = new ArrayList<>(List.of(
+				"desenvolvedor software",
+				"qa testes",
+				"engenharia dados",
+				"devops cloud infraestrutura",
+				"seguranca informacao",
+				"estagio tecnologia"
+		));
 
 		public String getApiBaseUrl() {
 			return apiBaseUrl;
@@ -375,12 +410,28 @@ public class RadarProperties {
 			this.apiKey = apiKey;
 		}
 
+		public String getLocalizacao() {
+			return localizacao;
+		}
+
+		public void setLocalizacao(String localizacao) {
+			this.localizacao = localizacao;
+		}
+
 		public int getMaxItensPorBusca() {
 			return maxItensPorBusca;
 		}
 
 		public void setMaxItensPorBusca(int maxItensPorBusca) {
 			this.maxItensPorBusca = maxItensPorBusca;
+		}
+
+		public int getMaxTermosPorExecucao() {
+			return maxTermosPorExecucao;
+		}
+
+		public void setMaxTermosPorExecucao(int maxTermosPorExecucao) {
+			this.maxTermosPorExecucao = maxTermosPorExecucao;
 		}
 
 		public int getTimeoutSegundos() {
@@ -390,6 +441,14 @@ public class RadarProperties {
 		public void setTimeoutSegundos(int timeoutSegundos) {
 			this.timeoutSegundos = timeoutSegundos;
 		}
+
+		public List<String> getTermosBusca() {
+			return termosBusca;
+		}
+
+		public void setTermosBusca(List<String> termosBusca) {
+			this.termosBusca = termosBusca;
+		}
 	}
 
 	public static class Adzuna {
@@ -397,7 +456,17 @@ public class RadarProperties {
 		private String appId = "";
 		private String appKey = "";
 		private int maxItensPorBusca = 20;
+		private int maxTermosPorExecucao = 2;
+		private boolean ordenarPorData = true;
 		private int timeoutSegundos = 15;
+		private List<String> termosBusca = new ArrayList<>(List.of(
+				"desenvolvedor software",
+				"qa testes",
+				"engenharia dados",
+				"devops cloud",
+				"seguranca informacao",
+				"estagio ti"
+		));
 
 		public String getApiBaseUrl() {
 			return apiBaseUrl;
@@ -431,12 +500,36 @@ public class RadarProperties {
 			this.maxItensPorBusca = maxItensPorBusca;
 		}
 
+		public int getMaxTermosPorExecucao() {
+			return maxTermosPorExecucao;
+		}
+
+		public void setMaxTermosPorExecucao(int maxTermosPorExecucao) {
+			this.maxTermosPorExecucao = maxTermosPorExecucao;
+		}
+
+		public boolean isOrdenarPorData() {
+			return ordenarPorData;
+		}
+
+		public void setOrdenarPorData(boolean ordenarPorData) {
+			this.ordenarPorData = ordenarPorData;
+		}
+
 		public int getTimeoutSegundos() {
 			return timeoutSegundos;
 		}
 
 		public void setTimeoutSegundos(int timeoutSegundos) {
 			this.timeoutSegundos = timeoutSegundos;
+		}
+
+		public List<String> getTermosBusca() {
+			return termosBusca;
+		}
+
+		public void setTermosBusca(List<String> termosBusca) {
+			this.termosBusca = termosBusca;
 		}
 	}
 
@@ -486,10 +579,11 @@ public class RadarProperties {
 		private boolean ativo = true;
 		private int cadenciaMinutos = 360;
 		private String categoria = "COMUNIDADE";
-		private String estadoValidacao = "ATIVA_VALIDADA";
+		private String estadoValidacao = "CONFIGURADA_NAO_VALIDADA";
 		private String metodoAcesso;
 		private String credencialNecessaria;
 		private String observacaoValidacao;
+		private List<String> termosBusca = new ArrayList<>();
 
 		public String getFornecedor() {
 			return fornecedor;
@@ -569,6 +663,14 @@ public class RadarProperties {
 
 		public void setObservacaoValidacao(String observacaoValidacao) {
 			this.observacaoValidacao = observacaoValidacao;
+		}
+
+		public List<String> getTermosBusca() {
+			return termosBusca;
+		}
+
+		public void setTermosBusca(List<String> termosBusca) {
+			this.termosBusca = termosBusca;
 		}
 	}
 }

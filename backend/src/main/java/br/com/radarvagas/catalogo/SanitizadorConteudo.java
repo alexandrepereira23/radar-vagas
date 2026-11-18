@@ -80,16 +80,23 @@ public final class SanitizadorConteudo {
 			}
 
 			String queryFiltrada = filtrarQueryRastreamento(uri.getRawQuery());
-			URI normalizada = new URI(
-					schemeLower,
-					uri.getUserInfo(),
-					hostLower,
-					uri.getPort(),
-					uri.getRawPath(),
-					queryFiltrada,
-					null // remove fragmento (#) para comparação consistente
-			);
-			return normalizada.toASCIIString();
+			StringBuilder sb = new StringBuilder();
+			sb.append(schemeLower).append("://");
+			if (uri.getRawUserInfo() != null && !uri.getRawUserInfo().isBlank()) {
+				sb.append(uri.getRawUserInfo()).append('@');
+			}
+			sb.append(hostLower);
+			if (uri.getPort() != -1) {
+				sb.append(':').append(uri.getPort());
+			}
+			String rawPath = uri.getRawPath();
+			if (rawPath != null && !rawPath.isEmpty()) {
+				sb.append(rawPath);
+			}
+			if (queryFiltrada != null && !queryFiltrada.isBlank()) {
+				sb.append('?').append(queryFiltrada);
+			}
+			return new URI(sb.toString()).toASCIIString();
 		} catch (Exception e) {
 			return null;
 		}
@@ -148,15 +155,22 @@ public final class SanitizadorConteudo {
 	/**
 	 * Remove qualquer possível token/segredo de mensagens de erro antes de persistir ou exibir.
 	 */
-	public static String sanitizarMensagemErro(String mensagem, String segredoConfigurado) {
+	public static String sanitizarMensagemErro(String mensagem, String... segredosConfigurados) {
 		if (mensagem == null || mensagem.isBlank()) {
 			return "Erro não especificado na coleta.";
 		}
 		String resultado = mensagem;
-		if (segredoConfigurado != null && !segredoConfigurado.isBlank()) {
-			resultado = resultado.replace(segredoConfigurado, "[REDACTED]");
+		if (segredosConfigurados != null) {
+			for (String segredo : segredosConfigurados) {
+				if (segredo != null && !segredo.isBlank()) {
+					resultado = resultado.replace(segredo, "[REDACTED]");
+					resultado = resultado.replace(segredo.trim(), "[REDACTED]");
+				}
+			}
 		}
 		resultado = resultado.replaceAll("(?i)(ghp_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\\s+[A-Za-z0-9._\\-]+)", "[REDACTED]");
+		resultado = resultado.replaceAll("(?i)(app_key|app_id|api_key|apikey|token|access_token|secret|password)=([^&\\s\"']+)", "$1=[REDACTED]");
+		resultado = resultado.replaceAll("(?i)(/api/)([A-Za-z0-9_\\-]{8,})", "$1[REDACTED]");
 		if (resultado.length() > 900) {
 			resultado = resultado.substring(0, 900) + "...";
 		}

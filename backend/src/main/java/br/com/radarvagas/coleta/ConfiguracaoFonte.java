@@ -42,7 +42,7 @@ public class ConfiguracaoFonte {
 	private String categoria = "COMUNIDADE";
 
 	@Column(name = "estado_validacao", nullable = false, length = 50)
-	private String estadoValidacao = "ATIVA_VALIDADA";
+	private String estadoValidacao = "CONFIGURADA_NAO_VALIDADA";
 
 	@Column(name = "metodo_acesso", length = 255)
 	private String metodoAcesso;
@@ -58,6 +58,15 @@ public class ConfiguracaoFonte {
 
 	@Column(name = "cursor_ultima_atualizacao")
 	private Instant cursorUltimaAtualizacao;
+
+	@Column(name = "pagina_continuacao")
+	private Integer paginaContinuacao;
+
+	@Column(name = "cursor_janela_atual")
+	private Instant cursorJanelaAtual;
+
+	@Column(name = "maior_atualizacao_janela")
+	private Instant maiorAtualizacaoJanela;
 
 	@Column(name = "criado_em", nullable = false)
 	private Instant criadoEm;
@@ -167,6 +176,30 @@ public class ConfiguracaoFonte {
 
 	public void setCursorUltimaAtualizacao(Instant cursorUltimaAtualizacao) {
 		this.cursorUltimaAtualizacao = cursorUltimaAtualizacao;
+	}
+
+	public Integer getPaginaContinuacao() {
+		return paginaContinuacao;
+	}
+
+	public void setPaginaContinuacao(Integer paginaContinuacao) {
+		this.paginaContinuacao = paginaContinuacao;
+	}
+
+	public Instant getCursorJanelaAtual() {
+		return cursorJanelaAtual;
+	}
+
+	public void setCursorJanelaAtual(Instant cursorJanelaAtual) {
+		this.cursorJanelaAtual = cursorJanelaAtual;
+	}
+
+	public Instant getMaiorAtualizacaoJanela() {
+		return maiorAtualizacaoJanela;
+	}
+
+	public void setMaiorAtualizacaoJanela(Instant maiorAtualizacaoJanela) {
+		this.maiorAtualizacaoJanela = maiorAtualizacaoJanela;
 	}
 
 	public Instant getCriadoEm() {

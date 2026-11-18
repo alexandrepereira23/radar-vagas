@@ -1,6 +1,10 @@
 spring:
   application:
     name: radar-vagas-backend
+  config:
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5433/radar_vagas}
     username: ${SPRING_DATASOURCE_USERNAME:radar_vagas}
@@ -34,7 +38,7 @@ radar:
     token: ${GITHUB_TOKEN:}
     user-agent: ${RADAR_GITHUB_USER_AGENT:radar-vagas-local/0.2}
     itens-por-pagina: ${RADAR_GITHUB_ITENS_POR_PAGINA:20}
-    max-paginas-por-execucao: ${RADAR_GITHUB_MAX_PAGINAS:1}
+    max-paginas-por-execucao: ${RADAR_GITHUB_MAX_PAGINAS:2}
     sobreposicao-incremental-minutos: ${RADAR_GITHUB_SOBREPOSICAO_MINUTOS:60}
     max-tentativas: ${RADAR_GITHUB_MAX_TENTATIVAS:2}
     espera-inicial-ms: ${RADAR_GITHUB_ESPERA_INICIAL_MS:500}
@@ -66,8 +70,16 @@ radar:
     timeout-segundos: 15
   gupy:
     portal-base-url: ${RADAR_GUPY_PORTAL_BASE_URL:https://portal.gupy.io}
-    max-itens-por-busca: ${RADAR_GUPY_MAX_ITENS:15}
+    max-itens-por-busca: ${RADAR_GUPY_MAX_ITENS:20}
+    max-paginas-por-execucao: ${RADAR_GUPY_MAX_PAGINAS:2}
     timeout-segundos: 15
+    termos-busca:
+      - desenvolvedor
+      - qa
+      - dados
+      - devops
+      - seguranca
+      - estagio
   ashby:
     api-base-url: ${RADAR_ASHBY_API_BASE_URL:https://api.ashbyhq.com}
     max-itens-por-mural: ${RADAR_ASHBY_MAX_ITENS:25}
@@ -79,26 +91,44 @@ radar:
   jooble:
     api-base-url: ${RADAR_JOOBLE_API_BASE_URL:https://br.jooble.org}
     api-key: ${JOOBLE_API_KEY:}
+    localizacao: ${RADAR_JOOBLE_LOCALIZACAO:Brasil}
     max-itens-por-busca: ${RADAR_JOOBLE_MAX_ITENS:20}
+    max-termos-por-execucao: ${RADAR_JOOBLE_MAX_TERMOS_POR_EXECUCAO:3}
     timeout-segundos: 15
+    termos-busca:
+      - desenvolvedor software
+      - qa testes
+      - engenharia dados
+      - devops cloud infraestrutura
+      - seguranca informacao
+      - estagio tecnologia
   adzuna:
     api-base-url: ${RADAR_ADZUNA_API_BASE_URL:https://api.adzuna.com}
     app-id: ${ADZUNA_APP_ID:}
     app-key: ${ADZUNA_APP_KEY:}
     max-itens-por-busca: ${RADAR_ADZUNA_MAX_ITENS:20}
+    max-termos-por-execucao: ${RADAR_ADZUNA_MAX_TERMOS_POR_EXECUCAO:2}
+    ordenar-por-data: ${RADAR_ADZUNA_ORDENAR_POR_DATA:true}
     timeout-segundos: 15
+    termos-busca:
+      - desenvolvedor software
+      - qa testes
+      - engenharia dados
+      - devops cloud
+      - seguranca informacao
+      - estagio ti
   fontes-registradas:
     # 1. Busca ampla no Brasil via dados estruturados SSR (__NEXT_DATA__) do portal público Gupy
     - fornecedor: GUPY_PORTAL
       identificador: desenvolvedor
-      nome-exibicao: "Gupy Portal Brasil (Busca: desenvolvedor)"
+      nome-exibicao: "Gupy Portal Brasil (Busca Multicategoria)"
       ativo: true
       cadencia-minutos: 360
       categoria: PORTAL_BUSCA_AMPLA
-      estado-validacao: ATIVA_VALIDADA
-      metodo-acesso: "HTTP GET portal.gupy.io/job-search/term=... (JSON estruturado __NEXT_DATA__)"
+      estado-validacao: CONFIGURADA_NAO_VALIDADA
+      metodo-acesso: "HTTP GET portal.gupy.io/job-search/term=... (JSON estruturado __NEXT_DATA__ com rotação de termos/páginas)"
       credencial-necessaria: "Nenhuma (público)"
-      observacao-validacao: "Validado com teste real no Brasil. Extrai JSON SSR sem navegador automatizado."
+      observacao-validacao: "Fonte configurada; validação confirmada mediante evidência de coleta bem-sucedida."
     # 2. Murais públicos oficiais no Greenhouse de empresas com operação de tecnologia no Brasil
     - fornecedor: GREENHOUSE_BOARD
       identificador: quintoandar
@@ -106,40 +136,40 @@ radar:
       ativo: true
       cadencia-minutos: 360
       categoria: MURAL_EMPRESA
-      estado-validacao: ATIVA_VALIDADA
+      estado-validacao: CONFIGURADA_NAO_VALIDADA
       metodo-acesso: "API REST Oficial (boards-api.greenhouse.io/v1/boards/quintoandar/jobs?content=true)"
       credencial-necessaria: "Nenhuma (API pública oficial)"
-      observacao-validacao: "Validado com teste real. Filtra cargos técnicos elegíveis no Brasil."
+      observacao-validacao: "Fonte configurada; validação confirmada mediante evidência de coleta bem-sucedida."
     - fornecedor: GREENHOUSE_BOARD
       identificador: ebanx
       nome-exibicao: "Greenhouse • EBANX"
       ativo: true
       cadencia-minutos: 360
       categoria: MURAL_EMPRESA
-      estado-validacao: ATIVA_VALIDADA
+      estado-validacao: CONFIGURADA_NAO_VALIDADA
       metodo-acesso: "API REST Oficial (boards-api.greenhouse.io/v1/boards/ebanx/jobs?content=true)"
       credencial-necessaria: "Nenhuma (API pública oficial)"
-      observacao-validacao: "Validado com teste real. Filtra cargos técnicos elegíveis no Brasil."
+      observacao-validacao: "Fonte configurada; validação confirmada mediante evidência de coleta bem-sucedida."
     - fornecedor: GREENHOUSE_BOARD
       identificador: vtex
       nome-exibicao: "Greenhouse • VTEX"
       ativo: true
       cadencia-minutos: 360
       categoria: MURAL_EMPRESA
-      estado-validacao: ATIVA_VALIDADA
+      estado-validacao: CONFIGURADA_NAO_VALIDADA
       metodo-acesso: "API REST Oficial (boards-api.greenhouse.io/v1/boards/vtex/jobs?content=true)"
       credencial-necessaria: "Nenhuma (API pública oficial)"
-      observacao-validacao: "Validado com teste real. Filtra cargos técnicos elegíveis no Brasil."
+      observacao-validacao: "Fonte configurada; validação confirmada mediante evidência de coleta bem-sucedida."
     - fornecedor: GREENHOUSE_BOARD
       identificador: wildlifestudios
       nome-exibicao: "Greenhouse • Wildlife Studios"
       ativo: true
       cadencia-minutos: 360
       categoria: MURAL_EMPRESA
-      estado-validacao: ATIVA_VALIDADA
+      estado-validacao: CONFIGURADA_NAO_VALIDADA
       metodo-acesso: "API REST Oficial (boards-api.greenhouse.io/v1/boards/wildlifestudios/jobs?content=true)"
       credencial-necessaria: "Nenhuma (API pública oficial)"
-      observacao-validacao: "Validado com teste real. Filtra cargos técnicos elegíveis no Brasil."
+      observacao-validacao: "Fonte configurada; validação confirmada mediante evidência de coleta bem-sucedida."
     # 3. Mural público oficial na Ashby (filtra vagas técnicas elegíveis para Brasil / LATAM / Americas)
     - fornecedor: ASHBY_BOARD
       identificador: supabase
@@ -147,11 +177,11 @@ radar:
       ativo: true
       cadencia-minutos: 360
       categoria: MURAL_EMPRESA
-      estado-validacao: ATIVA_VALIDADA
+      estado-validacao: CONFIGURADA_NAO_VALIDADA
       metodo-acesso: "API REST Oficial (api.ashbyhq.com/posting-api/job-board/supabase)"
       credencial-necessaria: "Nenhuma (API pública oficial)"
-      observacao-validacao: "Validado com teste real. Importa apenas cargos técnicos elegíveis para Brasil/AMER."
-    # 4. Agregadores de busca ampla (conector implementado; requerem credencial de API do proprietário)
+      observacao-validacao: "Fonte configurada; validação confirmada mediante evidência de coleta bem-sucedida."
+    # 4. Agregadores de busca ampla (conector implementado para Jooble e Adzuna; requerem credencial e validação por coleta real)
     - fornecedor: JOOBLE_API
       identificador: tecnologia-brasil
       nome-exibicao: "Jooble Brasil (Agregador)"
@@ -161,7 +191,7 @@ radar:
       estado-validacao: BLOQUEADA_CREDENCIAL
       metodo-acesso: "API REST Oficial (POST https://br.jooble.org/api/{JOOBLE_API_KEY})"
       credencial-necessaria: "JOOBLE_API_KEY"
-      observacao-validacao: "Conector implementado. Bloqueado até que a variável JOOBLE_API_KEY seja configurada."
+      observacao-validacao: "Conector implementado. Bloqueado até que a variável JOOBLE_API_KEY seja configurada e validada em coleta."
     - fornecedor: ADZUNA_API
       identificador: tecnologia-brasil
       nome-exibicao: "Adzuna Brasil (Agregador)"
@@ -169,19 +199,19 @@ radar:
       cadencia-minutos: 360
       categoria: AGREGADOR
       estado-validacao: BLOQUEADA_CREDENCIAL
-      metodo-acesso: "API REST Oficial (GET https://api.adzuna.com/v1/api/jobs/br/search/1)"
+      metodo-acesso: "API REST Oficial (GET https://api.adzuna.com/v1/api/jobs/br/search/{page})"
       credencial-necessaria: "ADZUNA_APP_ID e ADZUNA_APP_KEY"
-      observacao-validacao: "Conector implementado. Bloqueado até que ADZUNA_APP_ID e ADZUNA_APP_KEY sejam configurados."
+      observacao-validacao: "Conector implementado. Bloqueado até que ADZUNA_APP_ID e ADZUNA_APP_KEY sejam configurados e validados em coleta."
     - fornecedor: JSEARCH_API
       identificador: tecnologia-brasil
       nome-exibicao: "JSearch / OpenWebNinja (Agregador)"
       ativo: false
       cadencia-minutos: 360
       categoria: AGREGADOR
-      estado-validacao: BLOQUEADA_CREDENCIAL
-      metodo-acesso: "API REST (OpenWebNinja / RapidAPI JSearch)"
-      credencial-necessaria: "JSEARCH_API_KEY"
-      observacao-validacao: "Bloqueado por ausência de JSEARCH_API_KEY."
+      estado-validacao: NAO_IMPLEMENTADA
+      metodo-acesso: "Sem conector implementado nesta versão"
+      credencial-necessaria: "Desnecessária nesta rodada (conector não implementado; não contratar plano)"
+      observacao-validacao: "Conector ainda não implementado no código. Preencher JSEARCH_API_KEY não ativa esta fonte."
     # 5. Fontes experimentais / murais avaliados com limitação ou bloqueio explícito
     - fornecedor: LEVER_BOARD
       identificador: exemplo-lever

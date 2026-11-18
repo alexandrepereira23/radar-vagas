@@ -15,7 +15,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -26,7 +29,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Conector para o portal público de busca da Gupy (portal.gupy.io).
  * Extrai dados estruturados do payload JSON SSR (__NEXT_DATA__) via HTTP simples,
- * sem utilizar navegador automatizado e sem contornar controles de acesso.
+ * priorizando publicações mais recentes e rotacionando termos/páginas sem navegador automatizado.
  */
 @Component
 public class GupyPortalConector implements ConectorFonteVagas {
@@ -64,162 +67,186 @@ public class GupyPortalConector implements ConectorFonteVagas {
 
 	@Override
 	public ResultadoColetaFonte coletar(ConfiguracaoFonte configuracao) {
-		String termoBusca = configuracao.getIdentificadorMural();
 		String base = properties.getGupy().getPortalBaseUrl();
 		if (base.endsWith("/")) {
 			base = base.substring(0, base.length() - 1);
 		}
-		String termoCodificado = URLEncoder.encode(termoBusca, StandardCharsets.UTF_8);
-		String url = base + "/job-search/term=" + termoCodificado;
 		int maxItens = Math.max(1, properties.getGupy().getMaxItensPorBusca());
+		int maxConsultasExecucao = Math.max(1, properties.getGupy().getMaxPaginasPorExecucao());
+		List<String> termos = resolverTermosBusca(configuracao.getIdentificadorMural());
+		int totalTermos = termos.size();
 
-		List<AnuncioExtraido> validos = new ArrayList<>();
+		int indiceInicial = (configuracao.getPaginaContinuacao() != null
+				&& configuracao.getPaginaContinuacao() >= 1
+				&& configuracao.getPaginaContinuacao() <= totalTermos)
+				? configuracao.getPaginaContinuacao() - 1
+				: 0;
+
+		Map<String, AnuncioExtraido> validosPorId = new LinkedHashMap<>();
 		int recebidos = 0;
 		int ignorados = 0;
 		int erros = 0;
 		String erroResumido = null;
+		boolean limiteAtingido = false;
+		boolean recorteVolume = false;
+		int consultasRealizadas = 0;
+		int ultimoIndiceConcluido = indiceInicial - 1;
 		Instant maiorPublicacao = configuracao.getCursorUltimaAtualizacao();
 
-		try {
-			HttpRequest request = HttpRequest.newBuilder()
-					.uri(URI.create(url))
-					.timeout(Duration.ofSeconds(Math.max(2, properties.getGupy().getTimeoutSegundos())))
-					.header("Accept", "text/html,application/xhtml+xml")
-					.header("User-Agent", properties.getGithub().getUserAgent())
-					.GET()
-					.build();
-
-			HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-			if (response.statusCode() == 429 || response.statusCode() == 403) {
-				return new ResultadoColetaFonte(
-						StatusExecucaoColeta.LIMITE_ATINGIDO,
-						List.of(),
-						0,
-						0,
-						1,
-						null,
-						null,
-						maiorPublicacao,
-						"Acesso bloqueado ou limite atingido no portal Gupy (HTTP " + response.statusCode() + ")."
-				);
+		for (int i = indiceInicial; i < totalTermos && consultasRealizadas < maxConsultasExecucao; i++) {
+			if (validosPorId.size() >= maxItens) {
+				recorteVolume = true;
+				break;
 			}
-			if (response.statusCode() < 200 || response.statusCode() >= 300) {
-				return new ResultadoColetaFonte(
-						StatusExecucaoColeta.FALHA,
-						List.of(),
-						0,
-						0,
-						1,
-						null,
-						null,
-						maiorPublicacao,
-						"Resposta HTTP " + response.statusCode() + " ao consultar portal Gupy."
-				);
-			}
+			String termoBusca = termos.get(i);
+			String termoCodificado = URLEncoder.encode(termoBusca, StandardCharsets.UTF_8);
+			String url = base + "/job-search/term=" + termoCodificado;
+			consultasRealizadas++;
 
-			Matcher matcher = PADRAO_NEXT_DATA.matcher(response.body());
-			if (!matcher.find()) {
-				return new ResultadoColetaFonte(
-						StatusExecucaoColeta.FALHA,
-						List.of(),
-						0,
-						0,
-						1,
-						null,
-						null,
-						maiorPublicacao,
-						"Estrutura da página da Gupy mudou: bloco estruturado __NEXT_DATA__ não encontrado."
-				);
-			}
+			try {
+				HttpRequest request = HttpRequest.newBuilder()
+						.uri(URI.create(url))
+						.timeout(Duration.ofSeconds(Math.max(2, properties.getGupy().getTimeoutSegundos())))
+						.header("Accept", "text/html,application/xhtml+xml")
+						.header("User-Agent", properties.getGithub().getUserAgent())
+						.GET()
+						.build();
 
-			String jsonNextData = matcher.group(1);
-			JsonNode raiz = objectMapper.readTree(jsonNextData);
-			JsonNode dataNode = raiz.at("/props/pageProps/initialJobList/data");
-			if (dataNode == null || !dataNode.isArray()) {
-				return new ResultadoColetaFonte(
-						StatusExecucaoColeta.FALHA,
-						List.of(),
-						0,
-						0,
-						1,
-						null,
-						null,
-						maiorPublicacao,
-						"Lista estruturada 'initialJobList.data' não encontrada no payload da Gupy."
-				);
-			}
-
-			for (JsonNode item : dataNode) {
-				if (validos.size() >= maxItens) {
+				HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+				if (response.statusCode() == 429 || response.statusCode() == 403) {
+					erros++;
+					limiteAtingido = true;
+					erroResumido = "Acesso bloqueado ou limite atingido no portal Gupy (HTTP " + response.statusCode() + ").";
 					break;
 				}
-				recebidos++;
-				try {
-					String idExterno = textoOuNulo(item, "id");
-					String titulo = textoOuNulo(item, "name");
-					String descricao = textoOuNulo(item, "description");
-					String empresa = textoOuNulo(item, "careerPageName");
-					String jobUrl = textoOuNulo(item, "jobUrl");
-					String workplaceType = textoOuNulo(item, "workplaceType");
-					String jobType = textoOuNulo(item, "type");
-					String cidade = textoOuNulo(item, "city");
-					String estado = textoOuNulo(item, "state");
-
-					Instant publicadoEm = parseDataIso(textoOuNulo(item, "publishedDate"));
-					if (publicadoEm != null && (maiorPublicacao == null || publicadoEm.isAfter(maiorPublicacao))) {
-						maiorPublicacao = publicadoEm;
-					}
-
-					ModalidadeTrabalho modalidade = mapearModalidadeGupy(workplaceType);
-					RegimeContratacao regime = mapearRegimeGupy(jobType);
-					TipoOportunidade tipoOp = "vacancy_type_talent_pool".equalsIgnoreCase(jobType)
-							? TipoOportunidade.BANCO_DE_TALENTOS
-							: null;
-
-					String localizacao = montarLocalizacao(cidade, estado, modalidade);
-
-					Optional<AnuncioExtraido> extraido = classificador.classificarAnuncioExterno(
-							FORNECEDOR,
-							termoBusca,
-							idExterno,
-							titulo,
-							empresa,
-							descricao,
-							localizacao,
-							modalidade,
-							regime,
-							tipoOp,
-							List.of(),
-							jobUrl,
-							jobUrl,
-							publicadoEm,
-							publicadoEm,
-							false,
-							true,
-							idExterno
-					);
-
-					if (extraido.isPresent()) {
-						validos.add(extraido.get());
-					} else {
-						ignorados++;
-					}
-				} catch (Exception itemEx) {
+				if (response.statusCode() < 200 || response.statusCode() >= 300) {
 					erros++;
-					erroResumido = SanitizadorConteudo.sanitizarMensagemErro(itemEx.getMessage(), null);
+					erroResumido = "Resposta HTTP " + response.statusCode() + " ao consultar portal Gupy.";
+					break;
 				}
+
+				Matcher matcher = PADRAO_NEXT_DATA.matcher(response.body());
+				if (!matcher.find()) {
+					erros++;
+					erroResumido = "Estrutura da página da Gupy mudou: bloco estruturado __NEXT_DATA__ não encontrado.";
+					break;
+				}
+
+				String jsonNextData = matcher.group(1);
+				JsonNode raiz = objectMapper.readTree(jsonNextData);
+				JsonNode dataNode = raiz.at("/props/pageProps/initialJobList/data");
+				if (dataNode == null || !dataNode.isArray()) {
+					erros++;
+					erroResumido = "Lista estruturada 'initialJobList.data' não encontrada no payload da Gupy.";
+					break;
+				}
+
+				List<JsonNode> itensOrdenados = new ArrayList<>();
+				dataNode.forEach(itensOrdenados::add);
+				itensOrdenados.sort(Comparator.comparing(
+						(JsonNode n) -> parseDataIso(textoOuNulo(n, "publishedDate")),
+						Comparator.nullsLast(Comparator.reverseOrder())
+				));
+
+				for (JsonNode item : itensOrdenados) {
+					if (validosPorId.size() >= maxItens) {
+						recorteVolume = true;
+						break;
+					}
+					recebidos++;
+					try {
+						String idExterno = textoOuNulo(item, "id");
+						String titulo = textoOuNulo(item, "name");
+						String descricao = textoOuNulo(item, "description");
+						String empresa = textoOuNulo(item, "careerPageName");
+						String jobUrl = textoOuNulo(item, "jobUrl");
+						String workplaceType = textoOuNulo(item, "workplaceType");
+						String jobType = textoOuNulo(item, "type");
+						String cidade = textoOuNulo(item, "city");
+						String estado = textoOuNulo(item, "state");
+
+						Instant publicadoEm = parseDataIso(textoOuNulo(item, "publishedDate"));
+						if (publicadoEm != null && (maiorPublicacao == null || publicadoEm.isAfter(maiorPublicacao))) {
+							maiorPublicacao = publicadoEm;
+						}
+
+						ModalidadeTrabalho modalidade = mapearModalidadeGupy(workplaceType);
+						RegimeContratacao regime = mapearRegimeGupy(jobType);
+						TipoOportunidade tipoOp = "vacancy_type_talent_pool".equalsIgnoreCase(jobType)
+								? TipoOportunidade.BANCO_DE_TALENTOS
+								: null;
+
+						String localizacao = montarLocalizacao(cidade, estado, modalidade);
+
+						Optional<AnuncioExtraido> extraido = classificador.classificarAnuncioExterno(
+								FORNECEDOR,
+								configuracao.getIdentificadorMural(),
+								idExterno,
+								titulo,
+								empresa,
+								descricao,
+								localizacao,
+								modalidade,
+								regime,
+								tipoOp,
+								List.of(),
+								jobUrl,
+								jobUrl,
+								publicadoEm,
+								publicadoEm,
+								false,
+								true,
+								idExterno
+						);
+
+						if (extraido.isPresent()) {
+							validosPorId.putIfAbsent(extraido.get().identificadorExterno(), extraido.get());
+						} else {
+							ignorados++;
+						}
+					} catch (Exception itemEx) {
+						erros++;
+						erroResumido = SanitizadorConteudo.sanitizarMensagemErro(itemEx.getMessage());
+					}
+				}
+				ultimoIndiceConcluido = i;
+			} catch (Exception ex) {
+				erros++;
+				erroResumido = SanitizadorConteudo.sanitizarMensagemErro(
+						"Erro ao consultar portal público Gupy: " + ex.getMessage()
+				);
+				break;
 			}
-		} catch (Exception ex) {
-			erros++;
-			erroResumido = SanitizadorConteudo.sanitizarMensagemErro(
-					"Erro ao consultar portal público Gupy: " + ex.getMessage(),
-					null
-			);
 		}
 
-		StatusExecucaoColeta status = erros > 0
-				? (recebidos > 0 ? StatusExecucaoColeta.SUCESSO_PARCIAL : StatusExecucaoColeta.FALHA)
-				: StatusExecucaoColeta.SUCESSO;
+		List<AnuncioExtraido> validos = new ArrayList<>(validosPorId.values());
+		boolean faltamTermos = erros == 0 && (ultimoIndiceConcluido + 1 < totalTermos);
+		boolean coletaIncompleta = faltamTermos || recorteVolume;
+		Integer proximaContinuacao = null;
+		if (erros > 0) {
+			proximaContinuacao = indiceInicial + 1;
+		} else if (coletaIncompleta && totalTermos > 1) {
+			int proximoIndice = (ultimoIndiceConcluido + 1) % totalTermos;
+			proximaContinuacao = proximoIndice == 0 ? null : proximoIndice + 1;
+			if (proximaContinuacao != null && erroResumido == null) {
+				erroResumido = "Recorte por orçamento de volume: consultados " + consultasRealizadas + " de "
+						+ totalTermos + " termo(s) na Gupy; continuação agendada para o termo " + proximaContinuacao + ".";
+			}
+		} else if (recorteVolume && erroResumido == null) {
+			erroResumido = "Recorte por limite de volume: importadas " + validos.size()
+					+ " vagas válidas (priorizadas por recência de publicação).";
+		}
+
+		StatusExecucaoColeta status;
+		if (limiteAtingido) {
+			status = validos.isEmpty() ? StatusExecucaoColeta.LIMITE_ATINGIDO : StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else if (erros > 0) {
+			status = validos.isEmpty() ? StatusExecucaoColeta.FALHA : StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else if (proximaContinuacao != null) {
+			status = StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else {
+			status = StatusExecucaoColeta.SUCESSO;
+		}
 
 		return new ResultadoColetaFonte(
 				status,
@@ -230,8 +257,31 @@ public class GupyPortalConector implements ConectorFonteVagas {
 				null,
 				null,
 				maiorPublicacao,
-				erroResumido
+				erroResumido,
+				proximaContinuacao != null,
+				proximaContinuacao,
+				null,
+				false
 		);
+	}
+
+	private List<String> resolverTermosBusca(String identificadorMural) {
+		List<String> configurados = properties.getGupy().getTermosBusca();
+		if (configurados != null) {
+			List<String> limpos = configurados.stream()
+					.filter(s -> s != null && !s.isBlank())
+					.map(String::trim)
+					.distinct()
+					.toList();
+			if (!limpos.isEmpty()) {
+				return limpos;
+			}
+		}
+		if (identificadorMural != null && !identificadorMural.isBlank()
+				&& !"tecnologia-brasil".equalsIgnoreCase(identificadorMural.trim())) {
+			return List.of(identificadorMural.trim());
+		}
+		return List.of("desenvolvedor");
 	}
 
 	private ModalidadeTrabalho mapearModalidadeGupy(String workplaceType) {

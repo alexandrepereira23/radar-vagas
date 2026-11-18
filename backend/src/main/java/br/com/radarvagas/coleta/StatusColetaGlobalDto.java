@@ -9,6 +9,12 @@ public record StatusColetaGlobalDto(
 		String motivoEstadoDados,
 		boolean coletaEmAndamento,
 		List<FonteConfiguradaDto> fontes,
-		List<ExecucaoColetaDto> ultimasExecucoes
+		List<ExecucaoColetaDto> ultimasExecucoes,
+		boolean atualizacaoParcial,
+		int fontesAtivasTotal,
+		int fontesAtualizadas,
+		int fontesComFalha,
+		int fontesDesatualizadas,
+		int fontesParciais
 ) {
 }

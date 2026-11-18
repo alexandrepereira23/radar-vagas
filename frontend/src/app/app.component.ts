@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RadarApiService } from './services/radar-api.service';
 import {
   ExecucaoColeta,
+  FonteConfigurada,
   PaginaVagas,
   StatusColetaGlobal,
   VagaDetalhe,
@@ -163,6 +164,29 @@ export class AppComponent implements OnInit {
     });
   }
 
+  executarFonteEspecifica(fonte: FonteConfigurada): void {
+    if (this.executandoColeta) {
+      return;
+    }
+    this.executandoColeta = true;
+    this.erroColeta = null;
+    this.mensagemColeta = null;
+
+    this.api.executarFonteIndividual(fonte.id).subscribe({
+      next: (exec: ExecucaoColeta) => {
+        this.executandoColeta = false;
+        this.mensagemColeta = `Fonte ${fonte.nomeExibicao} (${exec.statusRotulo}): ${exec.anunciosRecebidos} recebido(s), ${exec.anunciosValidos} válido(s), ${exec.anunciosNovos} novo(s), ${exec.errosContagem} erro(s).`;
+        this.carregarStatusColeta();
+        this.carregarVagas(this.paginaAtual);
+      },
+      error: () => {
+        this.executandoColeta = false;
+        this.erroColeta = `Falha ao executar a fonte ${fonte.nomeExibicao}.`;
+        this.carregarStatusColeta();
+      }
+    });
+  }
+
   alternarDiagnostico(): void {
     this.exibirDiagnosticoColeta = !this.exibirDiagnosticoColeta;
   }
@@ -191,6 +215,8 @@ export class AppComponent implements OnInit {
         return 'Jooble';
       case 'ADZUNA_API':
         return 'Adzuna';
+      case 'JSEARCH_API':
+        return 'JSearch (Não implementado)';
       default:
         return fornecedor;
     }
@@ -199,15 +225,44 @@ export class AppComponent implements OnInit {
   rotuloEstadoValidacao(estado: string | undefined): string {
     switch (estado) {
       case 'ATIVA_VALIDADA':
-        return 'Ativa e Validada';
+        return 'Validada por coleta';
+      case 'CONFIGURADA_NAO_VALIDADA':
+        return 'Configurada (aguarda coleta)';
+      case 'FALHA_AUTENTICACAO':
+        return 'Erro de autenticação/chave';
+      case 'FALHA_EXECUCAO':
+        return 'Falha na última coleta';
+      case 'LIMITE_ATINGIDO':
+        return 'Limite atingido (Rate Limit)';
       case 'BLOQUEADA_CREDENCIAL':
         return 'Bloqueada (Credencial ausente)';
+      case 'NAO_IMPLEMENTADA':
+        return 'Conector não implementado';
       case 'BLOQUEADA_RESTRICAO_ACESSO':
         return 'Bloqueada (Restrição de acesso)';
       case 'EXPERIMENTAL_ATIVAVEL':
         return 'Experimental / Inativa';
       default:
         return estado || 'Registrada';
+    }
+  }
+
+  rotuloSituacaoAtualizacao(situacao: string | undefined): string {
+    switch (situacao) {
+      case 'ATUALIZADA':
+        return 'Em dia';
+      case 'ATUALIZACAO_PARCIAL':
+        return 'Parcial / Continuação pendente';
+      case 'COM_FALHA':
+        return 'Com falha recente';
+      case 'DESATUALIZADA':
+        return 'Desatualizada';
+      case 'NUNCA_COLETADA':
+        return 'Nunca coletada';
+      case 'INATIVA':
+        return 'Inativa';
+      default:
+        return '—';
     }
   }
 

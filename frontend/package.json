@@ -22,6 +22,8 @@
     "@angular/build": "21.2.14",
     "@angular/cli": "21.2.14",
     "@angular/compiler-cli": "21.2.26",
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3",
     "jsdom": "26.0.0",
     "rollup": "npm:@rollup/wasm-node@4.68.5",
     "typescript": "5.9.3",

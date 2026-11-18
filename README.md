@@ -4,21 +4,23 @@ Aplicação local para reunir vagas reais e recentes de tecnologia no Brasil a p
 
 ---
 
-## Fontes Integradas e Registro de Cobertura (Etapa 2)
+## Quadro de Fontes: Implementação, Testes Locais e Validação Real
 
-| Fonte / Fornecedor | Categoria | Estado Atual | Método de Acesso | Credencial |
-| --- | --- | --- | --- | --- |
-| **GitHub Issues** (`backend-br/vagas`, `frontendbr/vagas`, `qa-brasil/vagas`, `datascience-br/vagas`, `DevOps-Brasil/Vagas`) | Comunidades BR | **Ativa e Validada** | API REST Oficial (`/repos/{owner}/{repo}/issues`) | Opcional (`GITHUB_TOKEN` amplia de 60 para 5.000 req/h) |
-| **Gupy Portal Brasil** (`GUPY_PORTAL`) | Portal de Busca Ampla | **Ativa e Validada** | HTTP GET em `portal.gupy.io/job-search/term=...` (extração de JSON estruturado SSR `__NEXT_DATA__` sem navegador automatizado) | Nenhuma |
-| **Greenhouse Job Board API** (`quintoandar`, `ebanx`, `vtex`, `wildlifestudios`) | Murais de Empresas | **Ativa e Validada** | API REST Oficial (`boards-api.greenhouse.io/v1/boards/{empresa}/jobs?content=true`) | Nenhuma |
-| **Ashby Public Job Posting API** (`supabase`) | Murais de Empresas | **Ativa e Validada** | API REST Oficial (`api.ashbyhq.com/posting-api/job-board/{empresa}`) | Nenhuma |
-| **Jooble Brasil** (`JOOBLE_API`) | Agregador | **Bloqueada por Credencial** | Conector implementado (`POST https://br.jooble.org/api/{key}`) | `JOOBLE_API_KEY` (ausente no ambiente) |
-| **Adzuna Brasil** (`ADZUNA_API`) | Agregador | **Bloqueada por Credencial** | Conector implementado (`GET https://api.adzuna.com/v1/api/jobs/br/search/1`) | `ADZUNA_APP_ID` e `ADZUNA_APP_KEY` (ausentes no ambiente) |
-| **JSearch / OpenWebNinja** (`JSEARCH_API`) | Agregador | **Bloqueada por Credencial** | Registrada para ativação mediante chave | `JSEARCH_API_KEY` (ausente no ambiente) |
-| **Lever Postings API** (`LEVER_BOARD`) | Murais de Empresas | **Experimental / Inativa** | Conector implementado (`GET https://api.lever.co/v0/postings/{site}?mode=json`) | Nenhuma (requer identificar empresa BR ativa no Lever) |
-| **Sólides Portal** (`SOLIDES_PORTAL`) | Portal Experimental | **Bloqueada por Restrição Técnica** | HTML inicial de `vagas.solides.com.br` não expõe JSON estruturado de vagas nem API pública documentada | — |
-| **LinkedIn Vagas** (`LINKEDIN`) | Portal Experimental | **Bloqueada por Termos de Uso** | Automação/scraping vedados pelos Termos do LinkedIn (`a1341387`) | — |
-| **Indeed / Glassdoor** (`INDEED_GLASSDOOR`) | Portal Experimental | **Bloqueada por Proteção Anti-Bot** | Protegido por desafio anti-bot/Cloudflare; o projeto não contorna CAPTCHAs ou controles de acesso | — |
+O sistema separa explicitamente **conector implementado**, **configuração/credencial presente**, **teste automatizado local** e **coleta real validada no fornecedor**:
+
+| Fonte / Fornecedor | Conector Implementado? | Credencial Necessária | Teste Local (Servidor Simulado) | Coleta Real no Fornecedor | Estado Inicial sem Coleta Real |
+| --- | --- | --- | --- | --- | --- |
+| **GitHub Issues** (`backend-br/vagas`, `frontendbr/vagas`, `qa-brasil/vagas`, `datascience-br/vagas`, `DevOps-Brasil/Vagas`) | **Sim** ([GitHubIssuesConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GitHubIssuesConector.java)) | Opcional: `GITHUB_TOKEN` (amplia de 60 para 5.000 req/h) | Aprovado (paginação truncada, retomada, rate limit, deduplicação) | **Validada em rede real** nos 5 repositórios (autenticada com `GITHUB_TOKEN`, `rateLimitRestante: 4995`) | `CONFIGURADA_NAO_VALIDADA` até a 1ª coleta com sucesso (`ATIVA_VALIDADA`) |
+| **Gupy Portal Brasil** (`GUPY_PORTAL`) | **Sim** ([GupyPortalConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GupyPortalConector.java)) | Nenhuma (público) | Aprovado (extração SSR `__NEXT_DATA__`, priorização por recência, rotação de termos) | **Validada em rede real** | `CONFIGURADA_NAO_VALIDADA` até a 1ª coleta com sucesso (`ATIVA_VALIDADA`) |
+| **Greenhouse Job Board API** (`quintoandar`, `ebanx`, `vtex`, `wildlifestudios`) | **Sim** ([GreenhouseConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GreenhouseConector.java)) | Nenhuma (API pública oficial) | Aprovado (priorização por recência, rotação de blocos por limite, filtro técnico BR) | **Validada em rede real** nas 4 empresas | `CONFIGURADA_NAO_VALIDADA` até a 1ª coleta com sucesso (`ATIVA_VALIDADA`) |
+| **Ashby Public Job Posting API** (`supabase`) | **Sim** ([AshbyConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/AshbyConector.java)) | Nenhuma (API pública oficial) | Aprovado (priorização por recência, rotação de blocos, elegibilidade Brasil/AMER) | **Validada em rede real** | `CONFIGURADA_NAO_VALIDADA` até a 1ª coleta com sucesso (`ATIVA_VALIDADA`) |
+| **Jooble Brasil** (`JOOBLE_API`) | **Sim** ([JoobleConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/JoobleConector.java)) | Obrigatória: `JOOBLE_API_KEY` | Aprovado (termos reais configuráveis, rejeição de HTTP 401/403 e HTTP 200 malformado sem `jobs`) | **Validada em rede real** com `JOOBLE_API_KEY` local (20 vagas técnicas importadas, 0 erros) | `BLOQUEADA_CREDENCIAL` sem chave; `CONFIGURADA_NAO_VALIDADA` com chave até coleta real ter sucesso (`ATIVA_VALIDADA`) |
+| **Adzuna Brasil** (`ADZUNA_API`) | **Sim** ([AdzunaConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/AdzunaConector.java)) | Obrigatória: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY` | Aprovado (termos configuráveis, `sort_by=date`, rejeição de 401/403 e HTTP 200 sem `results`) | **Validada em rede real** com `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` locais (24 recebidas, 20 vagas técnicas importadas, 0 erros) | `BLOQUEADA_CREDENCIAL` sem chaves; `CONFIGURADA_NAO_VALIDADA` com chaves até coleta real ter sucesso (`ATIVA_VALIDADA`) |
+| **Lever Postings API** (`LEVER_BOARD`) | **Sim** ([LeverConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/LeverConector.java)) | Nenhuma (requer slug de empresa ativa no Lever) | Aprovado | Empresas BR testadas retornaram HTTP 404 por migração de ATS | `EXPERIMENTAL_ATIVAVEL` (inativa até configurar slug válido) |
+| **JSearch / OpenWebNinja** (`JSEARCH_API`) | **Não implementado** | Desnecessária nesta rodada (deixar `JSEARCH_API_KEY` vazia; não contratar plano) | Registro de fonte `NAO_IMPLEMENTADA` testado | Não aplicável (sem conector implementado) | `NAO_IMPLEMENTADA` |
+| **Sólides Portal** (`SOLIDES_PORTAL`) | Não (bloqueio técnico) | Sem API pública documentada | Avaliado | HTML inicial não expõe `__NEXT_DATA__` nem JSON estruturado | `BLOQUEADA_RESTRICAO_ACESSO` |
+| **LinkedIn Vagas** (`LINKEDIN`) | Não (termos de uso) | Parceria comercial | Avaliado | Automação proibida pelos Termos do LinkedIn (`a1341387`) | `BLOQUEADA_RESTRICAO_ACESSO` |
+| **Indeed / Glassdoor** (`INDEED_GLASSDOOR`) | Não (proteção anti-bot) | Sem API aberta gratuita | Avaliado | Protegido por Cloudflare/desafio anti-bot (proibido contornar CAPTCHA) | `BLOQUEADA_RESTRICAO_ACESSO` |
 
 ---
 
@@ -27,41 +29,46 @@ Aplicação local para reunir vagas reais e recentes de tecnologia no Brasil a p
 | Camada | Tecnologia e Versão Fixada |
 | --- | --- |
 | **Backend** | Java 25 LTS + Spring Boot `4.1.2` (WebMVC, Data JPA, Validation, Flyway) |
-| **Banco de Dados** | PostgreSQL `17.12-alpine` via Docker Compose em `127.0.0.1:5433` + migrações Flyway (`V1`, `V2`) |
+| **Banco de Dados** | PostgreSQL `17.12-alpine` via Docker Compose em `127.0.0.1:5433` + migrações Flyway (`V1`, `V2`, `V3`) |
 | **Frontend** | Angular `21.2.26` (`@angular/cli` `21.2.14`, TypeScript `5.9.3`, Vitest `4.0.8`) |
-| **Segurança** | Bind exclusivo em `127.0.0.1`, sanitização de HTML, bloqueio de URLs locais/privadas e redaction de segredos |
+| **Segurança** | Bind exclusivo em `127.0.0.1`, sanitização de HTML, preservação idempotente de URLs codificadas, bloqueio de URLs locais/privadas e redaction de segredos |
 
 ---
 
-## 1. Como Configurar e Credenciais Opcionais
+## 1. Carregamento Local de Configuração (`.env`) e Credenciais
 
-1. (Opcional) Copie [.env.example](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/.env.example) para `.env` ou defina variáveis de ambiente no terminal antes de subir o backend:
+### Como o `.env` é carregado pelo Backend
+
+O arquivo [application.yml](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/resources/application.yml) configura nativamente o Spring Boot para importar o arquivo `.env` no formato `KEY=value`:
+
+```yaml
+spring:
+  config:
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
+```
+
+Isso garante carregamento único e previsível independentemente do diretório de trabalho:
+- **Executando a partir de `backend/`** (`cd backend; .\mvnw.cmd spring-boot:run`): o Spring Boot lê automaticamente `../.env` (na raiz do repositório).
+- **Executando a partir da raiz do projeto** (`.\backend\mvnw.cmd -f backend/pom.xml spring-boot:run`): o Spring Boot lê automaticamente `./.env` (na raiz do repositório).
+- O arquivo `.env` permanece listado no [.gitignore](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/.gitignore) e seus valores nunca são exibidos nos logs nem na API `/api/coletas/status`.
+
+### Passo a passo para configurar o `.env` localmente
+
+1. Na raiz do projeto, crie `.env` a partir de [.env.example](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/.env.example) caso ainda não exista:
    ```powershell
-   $env:GITHUB_TOKEN = "seu_token_github_opcional"
-   $env:JOOBLE_API_KEY = "sua_chave_jooble_opcional"
-   $env:ADZUNA_APP_ID = "seu_app_id_adzuna_opcional"
-   $env:ADZUNA_APP_KEY = "sua_app_key_adzuna_opcional"
+   if (-not (Test-Path .env)) { Copy-Item .env.example .env }
    ```
-
-### Guia de Credenciais Opcionais e Limitações Conhecidas
-
-- **`GITHUB_TOKEN` (Opcional — GitHub Issues):**
-  - **Funcionamento sem token:** ativo por padrão (limite público de 60 requisições/hora por IP).
-  - **Com token:** amplia o limite para 5.000 requisições/hora. Pode ser gerado gratuitamente em `https://github.com/settings/tokens` (Personal Access Token sem escopos de escrita).
-- **`JOOBLE_API_KEY` (Opcional — Agregador Jooble Brasil):**
-  - O conector [JoobleConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/JoobleConector.java) já está implementado.
-  - Sem a variável `JOOBLE_API_KEY`, a fonte permanece marcada explicitamente como `BLOQUEADA_CREDENCIAL`.
-  - Quando a chave (solicitada gratuitamente em `https://br.jooble.org/api/about`) é definida no ambiente, o sistema ativa a fonte automaticamente na inicialização.
-- **`ADZUNA_APP_ID` e `ADZUNA_APP_KEY` (Opcional — Agregador Adzuna Brasil):**
-  - O conector [AdzunaConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/AdzunaConector.java) já está implementado para o endpoint `/v1/api/jobs/br/search/1`.
-  - Sem as duas variáveis, permanece marcado como `BLOQUEADA_CREDENCIAL`. Ao defini-las (obtidas em `https://developer.adzuna.com/overview`), a fonte passa a ativa automaticamente.
-- **`JSEARCH_API_KEY` (Agregador JSearch / OpenWebNinja):**
-  - Registrado como `BLOQUEADA_CREDENCIAL` por exigir assinatura/chave em `https://www.openwebninja.com/api/jsearch` (conforme o PRD, nenhum plano pago foi contratado).
-- **Limitações de Fontes Experimentais e Murais (`LEVER_BOARD`, `SOLIDES_PORTAL`, `LINKEDIN`, `INDEED_GLASSDOOR`):**
-  - **Murais de Empresas (`GREENHOUSE_BOARD`, `ASHBY_BOARD`, `LEVER_BOARD`):** exigem identificar o identificador (`slug`) de cada empresa; não representam uma busca global automática. No caso do Lever ([LeverConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/LeverConector.java)), o conector está implementado, mas as empresas brasileiras testadas migraram de ATS (retornando `HTTP 404`), ficando como `EXPERIMENTAL_ATIVAVEL`.
-  - **Sólides (`SOLIDES_PORTAL`):** o portal `https://vagas.solides.com.br/` utiliza Next.js App Router sem expor JSON estruturado de vagas no HTML inicial e sem API pública documentada para candidatos (`BLOQUEADA_RESTRICAO_ACESSO`).
-  - **LinkedIn (`LINKEDIN`):** bloqueado por conformidade com os Termos de Uso (`https://www.linkedin.com/help/linkedin/answer/a1341387`), que proíbem scraping e coleta automatizada sem parceria comercial (`BLOQUEADA_RESTRICAO_ACESSO`).
-  - **Indeed e Glassdoor (`INDEED_GLASSDOOR` / JobSpy):** bloqueados por utilizarem proteção anti-bot / Cloudflare Turnstile nas páginas públicas; conforme o PRD, o sistema não contorna CAPTCHAs, bloqueios ou controles de acesso (`BLOQUEADA_RESTRICAO_ACESSO`).
+2. Edite o arquivo `.env` localmente (nunca cole segredos no chat nem em commits):
+   - **`GITHUB_TOKEN` (Opcional — GitHub Issues):**
+     - Crie um *Fine-grained personal access token* em `https://github.com/settings/personal-access-tokens/new` com acesso somente a repositórios públicos (*Public repositories*), sem permissões de escrita. Amplia o limite de 60 req/h para 5.000 req/h.
+   - **`JOOBLE_API_KEY` (Agregador Jooble Brasil):**
+     - Solicite a chave gratuita para o domínio brasileiro em `https://br.jooble.org/api/about` (cota gratuita informada pela documentação: 100 requisições/dia).
+   - **`ADZUNA_APP_ID` e `ADZUNA_APP_KEY` (Agregador Adzuna Brasil):**
+     - Cadastre uma aplicação gratuita em `https://developer.adzuna.com/signup` e copie `app_id` e `app_key` do painel. Para preservar as chamadas de teste da conta durante a validação, mantenha `RADAR_COLETA_AGENDAMENTO_ATIVO=false` no `.env` e dispare a coleta manualmente apenas para a fonte desejada.
+   - **`JSEARCH_API_KEY`:**
+     - **Deixe vazia.** O conector JSearch ainda não foi implementado nesta versão; preencher esta variável não ativa a fonte. Não contrate assinatura paga.
 
 ---
 
@@ -83,10 +90,13 @@ cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-### Passo 2.3 — Iniciar o Frontend (`http://127.0.0.1:4200`)
+> Reinicie o backend sempre que alterar chaves no arquivo `.env` da raiz.
+
+### Passo 2.3 — Instalar e Iniciar o Frontend (`http://127.0.0.1:4200`)
 
 ```powershell
 cd frontend
+npm ci
 npm start
 ```
 
@@ -94,40 +104,51 @@ Acesse `http://127.0.0.1:4200` no navegador.
 
 ---
 
-## 3. Como Coletar e Consultar as Vagas
+## 3. Como Coletar e Verificar se Cada Integração Funcionou
+
+A presença de uma chave no `.env` apenas **habilita** a fonte com estado `CONFIGURADA_NAO_VALIDADA`. Uma fonte só passa para `ATIVA_VALIDADA` após uma execução de coleta retornar HTTP 2xx com a estrutura JSON esperada (`jobs` no Jooble, `results` no Adzuna, array JSON no GitHub, etc.).
 
 - **Pela interface web (`http://127.0.0.1:4200`):**
-  1. Clique em **"Coletar agora"** para executar a coleta em todas as fontes ativas (`GITHUB_ISSUES`, `GUPY_PORTAL`, `GREENHOUSE_BOARD`, `ASHBY_BOARD`).
-  2. Clique em **"Ver fontes, bloqueios e coletas"** para inspecionar o quadro completo de conectores ativos, experimentais e bloqueados, além das métricas de cada coleta.
-  3. Filtre por **Fonte de origem**, **Busca textual**, **Data de publicação** (conhecida vs desconhecida), **Indisponíveis na origem** ou **Bancos de talentos**.
+  1. Clique em **"Ver fontes, bloqueios e coletas"**.
+  2. Verifique a coluna **Validação / Saúde**:
+     - `Configurada (aguarda coleta)`: credencial carregada do `.env`, aguardando a primeira execução.
+     - `Validada por coleta`: acesso e estrutura comprovados com timestamp de último sucesso.
+     - `Erro de autenticação/chave`: fornecedor rejeitou a credencial (`HTTP 401/403`); verifique a chave no `.env`.
+     - `Falha na última coleta` / `Limite atingido`: erro de rede, HTTP 5xx, payload HTTP 200 malformado ou rate limit (`HTTP 429`).
+     - `Conector não implementado`: exibido para `JSEARCH_API`.
+  3. Para testar apenas um fornecedor recém-configurado (ex.: Jooble ou Adzuna) sem gastar cota das outras fontes, clique no botão **"Coletar esta fonte"** na linha correspondente da tabela de diagnóstico.
 
 - **Via linha de comando (API REST):**
 
   ```powershell
-  # 1. Consultar registro de todas as fontes (ativas, experimentais e bloqueadas) e últimas execuções
+  # 1. Consultar status global, saúde individual por fonte e se a credencial foi carregada (credencialConfigurada: true/false)
   Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/coletas/status" | ConvertTo-Json -Depth 5
 
-  # 2. Disparar coleta manual nas fontes ativas
+  # 2. Disparar coleta manual em uma fonte específica pelo ID (ex.: testar apenas Jooble ou Adzuna)
+  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/coletas/executar/1" | ConvertTo-Json -Depth 5
+
+  # 3. Disparar coleta manual em todas as fontes ativas
   Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/coletas/executar" | ConvertTo-Json -Depth 5
 
-  # 3. Consultar vagas paginadas (todas as fontes ou filtrando por fonte específica)
+  # 4. Consultar vagas paginadas
   Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/vagas?page=0&size=15" | ConvertTo-Json -Depth 5
-  Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/vagas?page=0&size=10&fonte=GUPY_PORTAL" | ConvertTo-Json -Depth 5
-  Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/vagas?page=0&size=10&fonte=GREENHOUSE_BOARD" | ConvertTo-Json -Depth 5
   ```
 
 ---
 
-## 4. Como Executar os Testes e o Build
+## 4. Como Executar os Testes Automatizados e o Build
+
+Os testes automatizados utilizam servidores HTTP locais efêmeros e banco em memória (`@ActiveProfiles("test")`, com `spring.config.import` isolado), sem disparar chamadas externas pagas nem consumir cotas de fornecedores:
 
 ```powershell
-# Backend (13 testes de comportamento + empacotamento JAR)
+# Backend (20 testes de comportamento e regressão no Java 25 + empacotamento JAR)
 cd backend
-.\mvnw.cmd test
+.\mvnw.cmd clean test
 .\mvnw.cmd package -DskipTests
 
-# Frontend (testes de comportamento Vitest + build de produção)
+# Frontend (instalação limpa reproduzível + testes Vitest + build de produção)
 cd ..\frontend
+npm ci --no-audit --no-fund
 npm test
 npm run build
 ```

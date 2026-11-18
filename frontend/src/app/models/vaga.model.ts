@@ -79,6 +79,12 @@ export interface FonteConfigurada {
   observacaoValidacao?: string | null;
   ultimaColetaSucessoEm: string | null;
   cursorUltimaAtualizacao: string | null;
+  credencialConfigurada?: boolean;
+  situacaoAtualizacao?: string;
+  desatualizada?: boolean;
+  ultimoStatusExecucao?: string | null;
+  ultimoErroResumido?: string | null;
+  paginaContinuacao?: number | null;
 }
 
 export interface ExecucaoColeta {
@@ -108,6 +114,12 @@ export interface StatusColetaGlobal {
   coletaEmAndamento: boolean;
   fontes: FonteConfigurada[];
   ultimasExecucoes: ExecucaoColeta[];
+  atualizacaoParcial?: boolean;
+  fontesAtivasTotal?: number;
+  fontesAtualizadas?: number;
+  fontesComFalha?: number;
+  fontesDesatualizadas?: number;
+  fontesParciais?: number;
 }
 
 export interface ParametrosConsultaVagas {

@@ -57,7 +57,15 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 		int porPagina = Math.max(1, Math.min(100, properties.getGithub().getItensPorPagina()));
 		int maxPaginas = Math.max(1, properties.getGithub().getMaxPaginasPorExecucao());
 
-		Instant sinceIncremental = calcularSinceComSobreposicao(configuracao.getCursorUltimaAtualizacao());
+		boolean emContinuacao = configuracao.getPaginaContinuacao() != null && configuracao.getPaginaContinuacao() > 1;
+		int paginaInicial = emContinuacao ? configuracao.getPaginaContinuacao() : 1;
+		Instant sinceIncremental = emContinuacao
+				? configuracao.getCursorJanelaAtual()
+				: calcularSinceComSobreposicao(configuracao.getCursorUltimaAtualizacao());
+
+		Instant maiorUpdatedObservado = emContinuacao && configuracao.getMaiorAtualizacaoJanela() != null
+				? configuracao.getMaiorAtualizacaoJanela()
+				: configuracao.getCursorUltimaAtualizacao();
 
 		List<AnuncioExtraido> anunciosValidos = new ArrayList<>();
 		int recebidos = 0;
@@ -65,11 +73,15 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 		int erros = 0;
 		Integer rateLimitRestante = null;
 		Instant rateLimitResetEm = null;
-		Instant maiorUpdatedObservado = configuracao.getCursorUltimaAtualizacao();
 		String erroResumido = null;
 		boolean limiteAtingido = false;
+		boolean falhaAutenticacao = false;
+		boolean coletaIncompleta = false;
+		Integer proximaPaginaContinuacao = null;
 
-		for (int pagina = 1; pagina <= maxPaginas; pagina++) {
+		int paginaFinalLimite = paginaInicial + maxPaginas - 1;
+
+		for (int pagina = paginaInicial; pagina <= paginaFinalLimite; pagina++) {
 			String url = montarUrlPagina(repositorio, porPagina, pagina, sinceIncremental);
 			RespostaHttpPagina respostaPagina = requisitarComRetentativa(url);
 
@@ -87,6 +99,9 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 						properties.getGithub().getToken()
 				);
 				limiteAtingido = respostaPagina.limiteAtingido();
+				falhaAutenticacao = respostaPagina.falhaAutenticacao();
+				coletaIncompleta = true;
+				proximaPaginaContinuacao = pagina;
 				break;
 			}
 
@@ -95,11 +110,15 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 				if (raiz == null || !raiz.isArray()) {
 					erros++;
 					erroResumido = "Resposta inesperada da API do GitHub (não é uma lista JSON).";
+					coletaIncompleta = true;
+					proximaPaginaContinuacao = pagina;
 					break;
 				}
 
 				int itensNaPagina = raiz.size();
 				if (itensNaPagina == 0) {
+					coletaIncompleta = false;
+					proximaPaginaContinuacao = null;
 					break;
 				}
 
@@ -125,13 +144,35 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 					}
 				}
 
-				if (rateLimitRestante != null && rateLimitRestante <= 0) {
-					limiteAtingido = true;
-					erroResumido = "Limite de requisições da API do GitHub atingido após a página " + pagina + ".";
+				boolean haMaisPaginas = indicarExistenciaProximaPagina(
+						respostaPagina.linkHeader(),
+						itensNaPagina,
+						porPagina
+				);
+
+				if (!haMaisPaginas) {
+					coletaIncompleta = false;
+					proximaPaginaContinuacao = null;
 					break;
 				}
 
-				if (itensNaPagina < porPagina) {
+				if (rateLimitRestante != null && rateLimitRestante <= 0) {
+					limiteAtingido = true;
+					coletaIncompleta = true;
+					proximaPaginaContinuacao = pagina + 1;
+					erroResumido = "Limite de requisições da API do GitHub atingido após a página " + pagina
+							+ "; continuação pendente na página " + (pagina + 1) + ".";
+					break;
+				}
+
+				if (pagina == paginaFinalLimite) {
+					coletaIncompleta = true;
+					proximaPaginaContinuacao = pagina + 1;
+					if (erroResumido == null) {
+						erroResumido = "Coleta parcial: limite de " + maxPaginas
+								+ " página(s) por execução atingido na página " + pagina
+								+ "; continuação pendente na página " + (pagina + 1) + ".";
+					}
 					break;
 				}
 			} catch (Exception parseEx) {
@@ -140,6 +181,8 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 						"Falha ao interpretar JSON do GitHub: " + parseEx.getMessage(),
 						properties.getGithub().getToken()
 				);
+				coletaIncompleta = true;
+				proximaPaginaContinuacao = pagina;
 				break;
 			}
 		}
@@ -148,7 +191,8 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 				limiteAtingido,
 				erros,
 				recebidos,
-				anunciosValidos.size()
+				anunciosValidos.size(),
+				coletaIncompleta
 		);
 
 		return new ResultadoColetaFonte(
@@ -160,15 +204,27 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 				rateLimitRestante,
 				rateLimitResetEm,
 				maiorUpdatedObservado,
-				erroResumido
+				erroResumido,
+				coletaIncompleta,
+				proximaPaginaContinuacao,
+				sinceIncremental,
+				falhaAutenticacao
 		);
+	}
+
+	private boolean indicarExistenciaProximaPagina(String linkHeader, int itensNaPagina, int porPagina) {
+		if (linkHeader != null && !linkHeader.isBlank()) {
+			return linkHeader.contains("rel=\"next\"");
+		}
+		return itensNaPagina >= porPagina;
 	}
 
 	private StatusExecucaoColeta determinarStatusFinal(
 			boolean limiteAtingido,
 			int erros,
 			int recebidos,
-			int validos
+			int validos,
+			boolean coletaIncompleta
 	) {
 		if (limiteAtingido) {
 			return recebidos > 0 ? StatusExecucaoColeta.SUCESSO_PARCIAL : StatusExecucaoColeta.LIMITE_ATINGIDO;
@@ -177,6 +233,9 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 			return (recebidos > 0 || validos > 0)
 					? StatusExecucaoColeta.SUCESSO_PARCIAL
 					: StatusExecucaoColeta.FALHA;
+		}
+		if (coletaIncompleta) {
+			return StatusExecucaoColeta.SUCESSO_PARCIAL;
 		}
 		return StatusExecucaoColeta.SUCESSO;
 	}
@@ -211,7 +270,9 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 			String corpo,
 			Integer rateLimitRestante,
 			Instant rateLimitResetEm,
+			String linkHeader,
 			boolean limiteAtingido,
+			boolean falhaAutenticacao,
 			String erroFatal
 	) {
 	}
@@ -248,6 +309,7 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 				ultimoRateRestante = extrairInteiroHeader(headers, "x-ratelimit-remaining");
 				ultimoRateReset = extrairEpochHeader(headers, "x-ratelimit-reset");
 				Integer retryAfterSeg = extrairInteiroHeader(headers, "retry-after");
+				String linkHeader = headers.firstValue("link").orElse(null);
 
 				int status = response.statusCode();
 				if (status >= 200 && status < 300) {
@@ -255,6 +317,8 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 							response.body(),
 							ultimoRateRestante,
 							ultimoRateReset,
+							linkHeader,
+							false,
 							false,
 							null
 					);
@@ -273,7 +337,19 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 							+ (ultimoRateReset != null ? ". Reset previsto em " + ultimoRateReset : "")
 							+ (retryAfterSeg != null ? ". Retry-After: " + retryAfterSeg + "s" : "")
 							+ ".";
-					return new RespostaHttpPagina(null, ultimoRateRestante, ultimoRateReset, true, msgLimite);
+					return new RespostaHttpPagina(null, ultimoRateRestante, ultimoRateReset, linkHeader, true, false, msgLimite);
+				}
+
+				if (status == 401 || status == 403) {
+					return new RespostaHttpPagina(
+							null,
+							ultimoRateRestante,
+							ultimoRateReset,
+							linkHeader,
+							false,
+							true,
+							"Falha de autenticação/autorização (HTTP " + status + ") ao consultar GitHub Issues. Verifique o GITHUB_TOKEN configurado."
+					);
 				}
 
 				if (status >= 500 && tentativa < maxTentativas) {
@@ -286,6 +362,8 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 						null,
 						ultimoRateRestante,
 						ultimoRateReset,
+						linkHeader,
+						false,
 						false,
 						"Resposta HTTP " + status + " ao consultar GitHub Issues."
 				);
@@ -302,13 +380,15 @@ public class GitHubIssuesConector implements ConectorFonteVagas {
 						null,
 						ultimoRateRestante,
 						ultimoRateReset,
+						null,
+						false,
 						false,
 						"Erro de rede ao acessar GitHub Issues: " + ex.getClass().getSimpleName() + " - " + ex.getMessage()
 				);
 			}
 		}
 
-		return new RespostaHttpPagina(null, ultimoRateRestante, ultimoRateReset, false, "Tentativas esgotadas.");
+		return new RespostaHttpPagina(null, ultimoRateRestante, ultimoRateReset, null, false, false, "Tentativas esgotadas.");
 	}
 
 	private GitHubIssueClassificador.DadosBrutosIssue mapearNoJson(String repositorio, JsonNode item) {

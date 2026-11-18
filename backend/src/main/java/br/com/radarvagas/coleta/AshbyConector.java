@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -60,7 +61,7 @@ public class AshbyConector implements ConectorFonteVagas {
 		int maxItens = Math.max(1, properties.getAshby().getMaxItensPorMural());
 		String nomeEmpresa = resolverNomeEmpresa(boardName, configuracao.getNomeExibicao());
 
-		List<AnuncioExtraido> validos = new ArrayList<>();
+		List<AnuncioExtraido> todosValidos = new ArrayList<>();
 		int recebidos = 0;
 		int ignorados = 0;
 		int erros = 0;
@@ -92,7 +93,7 @@ public class AshbyConector implements ConectorFonteVagas {
 			}
 
 			JsonNode raiz = objectMapper.readTree(response.body());
-			JsonNode jobs = raiz != null ? raiz.get("jobs") : null;
+			JsonNode jobs = (raiz != null && raiz.isObject()) ? raiz.get("jobs") : null;
 			if (jobs == null || !jobs.isArray()) {
 				return new ResultadoColetaFonte(
 						StatusExecucaoColeta.FALHA,
@@ -107,10 +108,14 @@ public class AshbyConector implements ConectorFonteVagas {
 				);
 			}
 
-			for (JsonNode job : jobs) {
-				if (validos.size() >= maxItens) {
-					break;
-				}
+			List<JsonNode> jobsOrdenados = new ArrayList<>();
+			jobs.forEach(jobsOrdenados::add);
+			jobsOrdenados.sort(Comparator.comparing(
+					(JsonNode j) -> parseDataIso(textoOuNulo(j, "publishedAt")),
+					Comparator.nullsLast(Comparator.reverseOrder())
+			));
+
+			for (JsonNode job : jobsOrdenados) {
 				recebidos++;
 				try {
 					if (job.hasNonNull("isListed") && !job.get("isListed").asBoolean(true)) {
@@ -170,38 +175,85 @@ public class AshbyConector implements ConectorFonteVagas {
 					);
 
 					if (extraido.isPresent()) {
-						validos.add(extraido.get());
+						todosValidos.add(extraido.get());
 					} else {
 						ignorados++;
 					}
 				} catch (Exception itemEx) {
 					erros++;
-					erroResumido = SanitizadorConteudo.sanitizarMensagemErro(itemEx.getMessage(), null);
+					erroResumido = SanitizadorConteudo.sanitizarMensagemErro(itemEx.getMessage());
 				}
 			}
 		} catch (Exception ex) {
 			erros++;
 			erroResumido = SanitizadorConteudo.sanitizarMensagemErro(
-					"Erro ao consultar Ashby (" + boardName + "): " + ex.getMessage(),
-					null
+					"Erro ao consultar Ashby (" + boardName + "): " + ex.getMessage()
 			);
 		}
 
-		StatusExecucaoColeta status = erros > 0
-				? (recebidos > 0 ? StatusExecucaoColeta.SUCESSO_PARCIAL : StatusExecucaoColeta.FALHA)
-				: StatusExecucaoColeta.SUCESSO;
+		RecorteMural recorte = aplicarRecorteComRotacao(todosValidos, maxItens, configuracao.getPaginaContinuacao());
+		if (recorte.observacaoRecorte() != null && erroResumido == null) {
+			erroResumido = recorte.observacaoRecorte();
+		}
+
+		StatusExecucaoColeta status;
+		if (erros > 0) {
+			status = recorte.itens().isEmpty() ? StatusExecucaoColeta.FALHA : StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else if (recorte.coletaIncompleta()) {
+			status = StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else {
+			status = StatusExecucaoColeta.SUCESSO;
+		}
 
 		return new ResultadoColetaFonte(
 				status,
-				validos,
+				recorte.itens(),
 				recebidos,
 				ignorados,
 				erros,
 				null,
 				null,
 				maiorPublicacao,
-				erroResumido
+				erroResumido,
+				recorte.coletaIncompleta(),
+				recorte.proximaPagina(),
+				null,
+				false
 		);
+	}
+
+	private record RecorteMural(
+			List<AnuncioExtraido> itens,
+			boolean coletaIncompleta,
+			Integer proximaPagina,
+			String observacaoRecorte
+	) {
+	}
+
+	private RecorteMural aplicarRecorteComRotacao(
+			List<AnuncioExtraido> todosValidos,
+			int maxItens,
+			Integer paginaContinuacaoAtual
+	) {
+		if (todosValidos.size() <= maxItens) {
+			return new RecorteMural(todosValidos, false, null, null);
+		}
+		int bloco = (paginaContinuacaoAtual != null && paginaContinuacaoAtual > 1) ? paginaContinuacaoAtual : 1;
+		int inicio = (bloco - 1) * maxItens;
+		if (inicio >= todosValidos.size()) {
+			bloco = 1;
+			inicio = 0;
+		}
+		int fim = Math.min(inicio + maxItens, todosValidos.size());
+		List<AnuncioExtraido> fatia = new ArrayList<>(todosValidos.subList(inicio, fim));
+		if (fim < todosValidos.size()) {
+			int proximoBloco = bloco + 1;
+			String obs = "Recorte por limite de volume: importadas " + fatia.size() + " de "
+					+ todosValidos.size() + " vagas válidas (priorizadas por recência, bloco " + bloco
+					+ "); continuação agendada para o bloco " + proximoBloco + ".";
+			return new RecorteMural(fatia, true, proximoBloco, obs);
+		}
+		return new RecorteMural(fatia, false, null, null);
 	}
 
 	private ModalidadeTrabalho mapearModalidade(String workplaceType, boolean isRemote) {

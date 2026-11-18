@@ -10,8 +10,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -62,7 +62,7 @@ public class JoobleConector implements ConectorFonteVagas {
 					null,
 					null,
 					configuracao.getCursorUltimaAtualizacao(),
-					"Credencial ausente: configure a variável de ambiente JOOBLE_API_KEY para ativar o agregador Jooble Brasil."
+					"Credencial ausente: configure a variável de ambiente JOOBLE_API_KEY para habilitar o agregador Jooble Brasil."
 			);
 		}
 
@@ -71,51 +71,90 @@ public class JoobleConector implements ConectorFonteVagas {
 			base = base.substring(0, base.length() - 1);
 		}
 		String url = base + "/api/" + apiKey.trim();
-		String keywords = configuracao.getIdentificadorMural().replace("-", " ");
-		int maxItens = Math.max(1, properties.getJooble().getMaxItensPorBusca());
+		String localizacaoPadrao = properties.getJooble().getLocalizacao() != null
+				&& !properties.getJooble().getLocalizacao().isBlank()
+				? properties.getJooble().getLocalizacao().trim()
+				: "Brasil";
 
-		List<AnuncioExtraido> validos = new ArrayList<>();
+		List<String> termos = resolverTermosBusca();
+		int maxItens = Math.max(1, properties.getJooble().getMaxItensPorBusca());
+		int maxTermosExecucao = Math.max(1, properties.getJooble().getMaxTermosPorExecucao());
+
+		int totalTermos = termos.size();
+		int indiceInicial = (configuracao.getPaginaContinuacao() != null
+				&& configuracao.getPaginaContinuacao() >= 1
+				&& configuracao.getPaginaContinuacao() <= totalTermos)
+				? configuracao.getPaginaContinuacao() - 1
+				: 0;
+
+		Map<String, AnuncioExtraido> validosPorId = new LinkedHashMap<>();
 		int recebidos = 0;
 		int ignorados = 0;
 		int erros = 0;
 		String erroResumido = null;
+		boolean falhaAutenticacao = false;
+		boolean limiteAtingido = false;
+		boolean recorteVolume = false;
+		int termosProcessados = 0;
+		int ultimoIndiceConcluido = indiceInicial - 1;
 
-		try {
-			String payloadJson = objectMapper.writeValueAsString(Map.of(
-					"keywords", keywords,
-					"location", "Brasil",
-					"page", "1"
-			));
-
-			HttpRequest request = HttpRequest.newBuilder()
-					.uri(URI.create(url))
-					.timeout(Duration.ofSeconds(Math.max(2, properties.getJooble().getTimeoutSegundos())))
-					.header("Content-Type", "application/json")
-					.header("Accept", "application/json")
-					.header("User-Agent", properties.getGithub().getUserAgent())
-					.POST(HttpRequest.BodyPublishers.ofString(payloadJson, StandardCharsets.UTF_8))
-					.build();
-
-			HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-			if (response.statusCode() < 200 || response.statusCode() >= 300) {
-				return new ResultadoColetaFonte(
-						StatusExecucaoColeta.FALHA,
-						List.of(),
-						0,
-						0,
-						1,
-						null,
-						null,
-						configuracao.getCursorUltimaAtualizacao(),
-						"Resposta HTTP " + response.statusCode() + " ao consultar Jooble API."
-				);
+		for (int i = indiceInicial; i < totalTermos && termosProcessados < maxTermosExecucao; i++) {
+			if (validosPorId.size() >= maxItens) {
+				recorteVolume = true;
+				break;
 			}
+			String keywords = termos.get(i);
+			termosProcessados++;
 
-			JsonNode raiz = objectMapper.readTree(response.body());
-			JsonNode jobs = raiz != null ? raiz.get("jobs") : null;
-			if (jobs != null && jobs.isArray()) {
+			try {
+				String payloadJson = objectMapper.writeValueAsString(Map.of(
+						"keywords", keywords,
+						"location", localizacaoPadrao,
+						"page", "1"
+				));
+
+				HttpRequest request = HttpRequest.newBuilder()
+						.uri(URI.create(url))
+						.timeout(Duration.ofSeconds(Math.max(2, properties.getJooble().getTimeoutSegundos())))
+						.header("Content-Type", "application/json")
+						.header("Accept", "application/json")
+						.header("User-Agent", properties.getGithub().getUserAgent())
+						.POST(HttpRequest.BodyPublishers.ofString(payloadJson, StandardCharsets.UTF_8))
+						.build();
+
+				HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+				int statusHttp = response.statusCode();
+
+				if (statusHttp == 401 || statusHttp == 403) {
+					erros++;
+					falhaAutenticacao = true;
+					erroResumido = "Falha de autenticação/autorização (HTTP " + statusHttp
+							+ ") ao consultar Jooble API. Verifique a chave JOOBLE_API_KEY.";
+					break;
+				}
+				if (statusHttp == 429) {
+					erros++;
+					limiteAtingido = true;
+					erroResumido = "Limite de requisições atingido na Jooble API (HTTP 429).";
+					break;
+				}
+				if (statusHttp < 200 || statusHttp >= 300) {
+					erros++;
+					erroResumido = "Resposta HTTP " + statusHttp + " ao consultar Jooble API.";
+					break;
+				}
+
+				JsonNode raiz = objectMapper.readTree(response.body());
+				JsonNode jobs = (raiz != null && raiz.isObject()) ? raiz.get("jobs") : null;
+				if (jobs == null || !jobs.isArray()) {
+					erros++;
+					erroResumido = "Payload inválido da Jooble API (campo 'jobs' ausente ou não é uma lista JSON).";
+					break;
+				}
+
 				for (JsonNode job : jobs) {
-					if (validos.size() >= maxItens) {
+					if (validosPorId.size() >= maxItens) {
+						recorteVolume = true;
 						break;
 					}
 					recebidos++;
@@ -126,7 +165,6 @@ public class JoobleConector implements ConectorFonteVagas {
 					String snippet = textoOuNulo(job, "snippet");
 					String link = textoOuNulo(job, "link");
 
-					// Jooble retorna 'updated' como string relativa/data de atualização; não assumir como data de publicação original se não for ISO confiável
 					Optional<AnuncioExtraido> extraido = classificador.classificarAnuncioExterno(
 							FORNECEDOR,
 							configuracao.getIdentificadorMural(),
@@ -149,23 +187,47 @@ public class JoobleConector implements ConectorFonteVagas {
 					);
 
 					if (extraido.isPresent()) {
-						validos.add(extraido.get());
+						validosPorId.putIfAbsent(extraido.get().identificadorExterno(), extraido.get());
 					} else {
 						ignorados++;
 					}
 				}
+				ultimoIndiceConcluido = i;
+			} catch (Exception ex) {
+				erros++;
+				erroResumido = SanitizadorConteudo.sanitizarMensagemErro(
+						"Erro ao consultar Jooble API: " + ex.getMessage(),
+						apiKey
+				);
+				break;
 			}
-		} catch (Exception ex) {
-			erros++;
-			erroResumido = SanitizadorConteudo.sanitizarMensagemErro(
-					"Erro ao consultar Jooble API: " + ex.getMessage(),
-					apiKey
-			);
 		}
 
-		StatusExecucaoColeta status = erros > 0
-				? (recebidos > 0 ? StatusExecucaoColeta.SUCESSO_PARCIAL : StatusExecucaoColeta.FALHA)
-				: StatusExecucaoColeta.SUCESSO;
+		List<AnuncioExtraido> validos = new ArrayList<>(validosPorId.values());
+		boolean faltamTermos = erros == 0 && (ultimoIndiceConcluido + 1 < totalTermos);
+		boolean coletaIncompleta = faltamTermos || recorteVolume;
+		Integer proximaContinuacao = null;
+		if (erros > 0) {
+			proximaContinuacao = indiceInicial + 1;
+		} else if (coletaIncompleta) {
+			int proximoIndice = (ultimoIndiceConcluido + 1) % totalTermos;
+			proximaContinuacao = proximoIndice == 0 ? null : proximoIndice + 1;
+			if (proximaContinuacao != null && erroResumido == null) {
+				erroResumido = "Recorte por orçamento de cota/volume: consultados " + termosProcessados + " de "
+						+ totalTermos + " termo(s); continuação agendada para o termo " + proximaContinuacao + ".";
+			}
+		}
+
+		StatusExecucaoColeta status;
+		if (limiteAtingido) {
+			status = validos.isEmpty() ? StatusExecucaoColeta.LIMITE_ATINGIDO : StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else if (erros > 0) {
+			status = validos.isEmpty() ? StatusExecucaoColeta.FALHA : StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else if (proximaContinuacao != null) {
+			status = StatusExecucaoColeta.SUCESSO_PARCIAL;
+		} else {
+			status = StatusExecucaoColeta.SUCESSO;
+		}
 
 		return new ResultadoColetaFonte(
 				status,
@@ -176,8 +238,27 @@ public class JoobleConector implements ConectorFonteVagas {
 				null,
 				null,
 				configuracao.getCursorUltimaAtualizacao(),
-				erroResumido
+				erroResumido,
+				proximaContinuacao != null,
+				proximaContinuacao,
+				null,
+				falhaAutenticacao
 		);
+	}
+
+	private List<String> resolverTermosBusca() {
+		List<String> configurados = properties.getJooble().getTermosBusca();
+		if (configurados != null) {
+			List<String> limpos = configurados.stream()
+					.filter(s -> s != null && !s.isBlank())
+					.map(String::trim)
+					.distinct()
+					.toList();
+			if (!limpos.isEmpty()) {
+				return limpos;
+			}
+		}
+		return List.of("desenvolvedor software");
 	}
 
 	private String textoOuNulo(JsonNode node, String campo) {

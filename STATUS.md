@@ -1,87 +1,74 @@
 # STATUS — Radar de Vagas
 
-Última atualização: 18/11/2026
+Última atualização: 18/11/2026 (Revisão de validação, paginação e credenciais)
 
 ## 1. Etapa Atual
 
-- **Etapa 1 — Primeira entrega funcional: CONCLUÍDA.**
-- **Etapa 2 — Cobertura em múltiplas fontes: CONCLUÍDA.**
-- As Etapas 3 e 4 permanecem para as próximas iterações.
+- **Etapa 1 — Primeira entrega funcional:** Concluída.
+- **Etapa 2 — Cobertura em múltiplas fontes:** **Concluída e validada com coleta real autenticada.** Fontes públicas (`GITHUB_ISSUES` nos 5 repositórios com `GITHUB_TOKEN` ativo e `rateLimitRestante: 4995`, `GUPY_PORTAL`, `GREENHOUSE_BOARD` nas 4 empresas e `ASHBY_BOARD`) e os dois agregadores implementados (`JOOBLE_API` e `ADZUNA_API`) foram validados em rede real com persistência no PostgreSQL 17.
+- **Etapa 3 — Uso diário (Pendente):** Os filtros combináveis de recência de publicação (`24h`, `3 dias`, `7 dias`), área/senioridade/modalidade/localidade no servidor e os fluxos de alteração na API e na tela para ações pessoais (`já me candidatei` e `ocultar por falta de interesse`) são pendências da Etapa 3 (atualmente apenas a entidade/tabela `acao_pessoal` e a preservação em reexecuções estão implementadas).
+- **Etapa 4 — Estabilização e implantação pessoal:** Pendente.
 
 ---
 
-## 2. Decisões Técnicas (Etapas 1 e 2)
+## 2. Correções Técnicas Implementadas (Revisão P1 e P2)
 
-1. **Docker Compose e Isolamento de Porta (`127.0.0.1:5433`):**
-   - Com o Docker Desktop ativo, identificou-se que a porta `5432` do host Windows já é ocupada por um processo PostgreSQL nativo do sistema (PID 6500). Para evitar colisão de porta e garantir subida limpa via `docker compose up -d`, o container `radar-vagas-postgres` (`postgres:17.12-alpine`) foi mapeado para `127.0.0.1:5433:5432`.
-2. **Migração Flyway V2 (`V2__multiplas_fontes_etapa2.sql`):**
-   - Evoluiu `configuracao_fonte` com `categoria`, `estado_validacao`, `metodo_acesso`, `credencial_necessaria` e `observacao_validacao`, permitindo persistir e exibir no produto o registro formal de fontes ativas, experimentais e bloqueadas.
-   - Adicionou `codigo_requisicao` em `oportunidade` e `anuncio_origem` e índice por `fonte_principal`.
-3. **Filtro de Cargo Técnico e Elegibilidade no Brasil:**
-   - Para murais corporativos e portais de busca ampla (`GREENHOUSE_BOARD`, `ASHBY_BOARD`, `LEVER_BOARD`, `GUPY_PORTAL`, `JOOBLE_API`, `ADZUNA_API`), `GitHubIssueClassificador.classificarAnuncioExterno` aplica filtro explícito de cargo técnico (descartando vagas comerciais, jurídicas, RH, operações imobiliárias, etc.) e validação de elegibilidade para residentes no Brasil (rejeitando vagas `US Only`, `EU Only`, etc.).
-4. **Agrupamento Conservador Entre Fontes:**
-   - Oportunidades vindas de fontes distintas são unidas somente com evidência forte:
-     1. Mesmo link específico de candidatura após normalização segura (removendo parâmetros de rastreamento como `utm_*`, `fbclid`, `gclid`, `jobBoardSource`, `gh_src` e sufixos `/application`, mas preservando parâmetros identificadores de vaga).
-     2. Mesmo `codigo_requisicao` (`requisition_id`) explícito na mesma empresa identificada.
-   - Mesmo cargo e mesma empresa sem link ou código equivalente **não** são unidos, evitando ocultar vagas distintas de equipes ou cidades diferentes.
+1. **Paginação Truncada, Janela Estável e Continuação Persistida no GitHub (`P1`):**
+   - Criada a migração Flyway [V3__continuacao_paginacao_e_validacao.sql](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/resources/db/migration/V3__continuacao_paginacao_e_validacao.sql), adicionando `pagina_continuacao`, `cursor_janela_atual` e `maior_atualizacao_janela` em `configuracao_fonte`.
+   - Quando [GitHubIssuesConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GitHubIssuesConector.java) atinge `max-paginas-por-execucao` (ou rate limit) e a página está cheia / possui `rel="next"`, a coleta é reconhecida como incompleta (`SUCESSO_PARCIAL`), registrando a próxima página em `pagina_continuacao` e mantendo fixo o `cursor_janela_atual` (`since`), **sem avançar prematuramente `cursor_ultima_atualizacao`**.
+   - Na execução seguinte, a coleta retoma a partir de `pagina_continuacao` sem repetir as primeiras páginas e sem descartar anúncios de páginas posteriores atualizados antes da primeira página. O `cursor_ultima_atualizacao` só avança quando toda a janela conclui sem truncamento e sem erro de persistência.
+2. **Carregamento Previsível do `.env` pelo Spring Boot (`P1`):**
+   - Configurado `spring.config.import` em [application.yml](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/resources/application.yml) com `optional:file:./.env[.properties]` e `optional:file:../.env[.properties]`.
+   - O backend carrega automaticamente o `.env` da raiz tanto quando iniciado a partir de `backend/` (`.\mvnw.cmd spring-boot:run`) quanto a partir da raiz do projeto.
+   - Os valores das chaves nunca são exibidos nos logs nem na API (`/api/coletas/status` expõe apenas o booleano `credencialConfigurada`). Em [application-test.yml](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/test/resources/application-test.yml), `spring.config.import: ""` isola os testes automatizados para nunca dispararem chamadas externas pagas.
+3. **Tratamento Honesto do JSearch como Conector Não Implementado (`P1`):**
+   - `JSEARCH_API` foi atualizado para `estado-validacao: NAO_IMPLEMENTADA` (com status de execução `NAO_IMPLEMENTADA`), deixando explícito na interface, no [README.md](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/README.md) e no [.env.example](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/.env.example) que ainda não há conector implementado e que `JSEARCH_API_KEY` deve permanecer vazia (sem contratação de assinatura).
+4. **Separação entre Credencial Presente e Validação por Evidência Persistida (`P1`):**
+   - Em [OrquestradorColetaService.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/OrquestradorColetaService.java), configurar `JOOBLE_API_KEY` ou `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` habilita a fonte com estado `CONFIGURADA_NAO_VALIDADA` (e não mais `ATIVA_VALIDADA`).
+   - Uma fonte só transita para `ATIVA_VALIDADA` quando uma execução de coleta persiste sucesso com payload válido.
+   - Erros de autenticação (`HTTP 401/403` -> `FALHA_AUTENTICACAO`), rate limit (`LIMITE_ATINGIDO`) e respostas `HTTP 200` malformadas sem o array esperado (`jobs` no Jooble, `results` no Adzuna -> `FALHA_EXECUCAO`) são registrados e **preservados entre reinícios do backend**.
+5. **Situação de Atualização por Fonte e Degradação Parcial no Estado Global (`P1`):**
+   - `consultarStatusGlobal()` calcula a saúde individual de cada fonte ativa (`ATUALIZADA`, `ATUALIZACAO_PARCIAL`, `COM_FALHA`, `DESATUALIZADA`, `NUNCA_COLETADA`) considerando sua cadência, paginação pendente de continuação e o resultado da execução mais recente.
+   - Quando uma fonte saudável coexiste com outra desatualizada, sem coleta ou com falha recente, o estado global informa explicitamente `Atualização parcial/degradada` (`dadosDesatualizados: true`, `atualizacaoParcial: true`) em vez de exibir o catálogo como totalmente atualizado a partir da fonte mais recente.
+6. **Consultas Reais Configuráveis, Priorização por Recência e Rotação de Recortes por Limite (`P2`):**
+   - [JoobleConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/JoobleConector.java), [AdzunaConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/AdzunaConector.java) e [GupyPortalConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GupyPortalConector.java) deixaram de usar identificadores administrativos (`tecnologia-brasil`) como texto de busca e utilizam listas configuráveis de termos cobrindo desenvolvimento, QA, dados, infraestrutura/cloud, segurança e estágio, com ordenação por data (`sort_by=date` no Adzuna e ordenação por `publishedDate` na Gupy) e rotação controlada de termos entre execuções via `pagina_continuacao`.
+   - [GreenhouseConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GreenhouseConector.java), [AshbyConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/AshbyConector.java) e [LeverConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/LeverConector.java) ordenam os anúncios por data de publicação decrescente antes de aplicar `max-itens-por-mural` e rotacionam os blocos seguintes via `pagina_continuacao`, registrando explicitamente quando há recorte por limite de volume.
+7. **Preservação Semântica e Idempotência de URLs Codificadas (`P2`):**
+   - Corrigido [SanitizadorConteudo.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/catalogo/SanitizadorConteudo.java) (`validarENormalizarUrlPublica`) para remontar a URI a partir dos componentes brutos já escapados sem invocação do construtor multi-argumento que causava dupla codificação de `%` (`%2F` -> `%252F`).
+8. **Consistência do `package-lock.json` para `npm ci` Multiplataforma:**
+   - Adicionados `@emnapi/core@1.11.3` e `@emnapi/runtime@1.11.3` em [frontend/package.json](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/frontend/package.json) e [frontend/package-lock.json](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/frontend/package-lock.json) para satisfazer as `peerDependencies` de `@napi-rs/wasm-runtime` em instalações limpas via `npm ci --no-audit --no-fund` tanto em Linux quanto em Windows.
 
 ---
 
-## 3. Registro de Fontes Avaliadas e Integradas (Etapa 2)
+## 3. Quadro Detalhado das Fontes (Configuração vs Implementação vs Teste Local vs Coleta Real)
 
-| Fornecedor | Identificador / Escopo | Estado | Método de Acesso e Paginação | Credenciais | Resultado do Teste Real (18/11/2026) |
+| Fornecedor | Identificador / Escopo | Conector Implementado? | Configuração / Credencial | Teste Local (Servidor HTTP de Teste) | Coleta Real Validada no Fornecedor? |
 | --- | --- | --- | --- | --- | --- |
-| `GITHUB_ISSUES` | `backend-br/vagas`, `frontendbr/vagas`, `qa-brasil/vagas`, `datascience-br/vagas`, `DevOps-Brasil/Vagas` | **ATIVA_VALIDADA** | REST API oficial (`GET /repos/{owner}/{repo}/issues`), `per_page`/`page`, cursor `since` com sobreposição de 60 min | Opcional: `GITHUB_TOKEN` (sem token: 60 req/h) | **Validado com rede real** nos 5 repositórios: coletou vagas reais de Backend, Frontend, QA, Dados e DevOps no Brasil com 0 erros. |
-| `GUPY_PORTAL` | Busca ampla: `desenvolvedor` (configurável) | **ATIVA_VALIDADA** | HTTP `GET https://portal.gupy.io/job-search/term=...` extraindo JSON estruturado SSR (`__NEXT_DATA__` -> `initialJobList.data`) sem navegador automatizado | Nenhuma | **Validado com rede real**: retornou vagas reais publicadas no Brasil (`CXP Brasil`, `Banco Industrial do Brasil`, `Somos BHS`, etc.) com `publishedDate`, empresa, modalidade, regime e link direto. |
-| `GREENHOUSE_BOARD` | `quintoandar`, `ebanx`, `vtex`, `wildlifestudios` | **ATIVA_VALIDADA** | REST API oficial (`GET https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true`) | Nenhuma | **Validado com rede real**: coletou 20 vagas técnicas elegíveis no Brasil das 4 empresas e descartou automaticamente 42 vagas não-técnicas ou fora do Brasil. |
-| `ASHBY_BOARD` | `supabase` | **ATIVA_VALIDADA** | REST API oficial (`GET https://api.ashbyhq.com/posting-api/job-board/{board}`) | Nenhuma | **Validado com rede real**: coletou 5 vagas técnicas elegíveis para Brasil/AMER e filtrou 13 vagas de outras regiões/áreas. |
-| `JOOBLE_API` | `tecnologia-brasil` | **BLOQUEADA_CREDENCIAL** | Conector HTTP implementado (`POST https://br.jooble.org/api/{key}`) | `JOOBLE_API_KEY` | Conector implementado e testado com servidor HTTP local; aguarda variável `JOOBLE_API_KEY` no ambiente para ativação real. |
-| `ADZUNA_API` | `tecnologia-brasil` | **BLOQUEADA_CREDENCIAL** | Conector HTTP implementado (`GET https://api.adzuna.com/v1/api/jobs/br/search/1`) | `ADZUNA_APP_ID` e `ADZUNA_APP_KEY` | Conector implementado e testado; aguarda variáveis `ADZUNA_APP_ID` e `ADZUNA_APP_KEY` no ambiente para ativação real. |
-| `JSEARCH_API` | `tecnologia-brasil` | **BLOQUEADA_CREDENCIAL** | API REST OpenWebNinja / RapidAPI JSearch | `JSEARCH_API_KEY` | Bloqueado por ausência da credencial `JSEARCH_API_KEY`. |
-| `LEVER_BOARD` | `LeverConector` | **EXPERIMENTAL_ATIVAVEL** | REST API oficial (`GET https://api.lever.co/v0/postings/{site}?mode=json`) | Nenhuma | Conector implementado; empresas BR testadas (`ifood`, `picpay`, `totvs`, `ciandt`, `loggi`, `wellhub`) retornaram HTTP 404 por terem migrado de ATS. |
-| `SOLIDES_PORTAL` | `vagas.solides.com.br` | **BLOQUEADA_RESTRICAO_ACESSO** | Portal Next.js App Router | API não documentada | Testado via HTTP real (Status 200): HTML inicial não contém JSON estruturado de vagas (`__NEXT_DATA__` ausente) e não há API pública documentada. |
-| `LINKEDIN` | `linkedin-jobs` | **BLOQUEADA_RESTRICAO_ACESSO** | Automação proibida pelos Termos de Uso | Parceria LinkedIn | Bloqueado por conformidade com `linkedin.com/help/linkedin/answer/a1341387` e diretrizes do PRD. |
-| `INDEED_GLASSDOOR` | `indeed-glassdoor-br` (e JobSpy) | **BLOQUEADA_RESTRICAO_ACESSO** | Protegido por Cloudflare / desafio anti-bot | Sem API gratuita aberta | Bloqueado em conformidade com o PRD (proibido contornar CAPTCHA ou bloqueios anti-bot). |
+| `GITHUB_ISSUES` | `backend-br/vagas`, `frontendbr/vagas`, `qa-brasil/vagas`, `datascience-br/vagas`, `DevOps-Brasil/Vagas` | **Sim** | Opcional: `GITHUB_TOKEN` (presente via `.env`) | **Aprovado** (paginação truncada e retomada, rate limit, deduplicação) | **Sim — Validada em rede real autenticada** (`rateLimitRestante: 4995`, 0 erros) |
+| `GUPY_PORTAL` | Termos rotativos: `desenvolvedor`, `qa`, `dados`, `devops`, `seguranca`, `estagio` | **Sim** | Nenhuma | **Aprovado** (`__NEXT_DATA__`, priorização por recência) | **Sim — Validada em rede real** |
+| `GREENHOUSE_BOARD` | `quintoandar`, `ebanx`, `vtex`, `wildlifestudios` | **Sim** | Nenhuma | **Aprovado** (ordenação por `first_published`, rotação de blocos por limite, filtro técnico BR) | **Sim — Validada em rede real** nas 4 empresas |
+| `ASHBY_BOARD` | `supabase` | **Sim** | Nenhuma | **Aprovado** (ordenação por `publishedAt`, elegibilidade Brasil/AMER) | **Sim — Validada em rede real** |
+| `JOOBLE_API` | Termos configuráveis (`radar.jooble.termos-busca`) | **Sim** | Obrigatória: `JOOBLE_API_KEY` (presente via `.env`) | **Aprovado** (consultas reais, falha 401/403, rejeição de HTTP 200 sem `jobs`, rotação de termos) | **Sim — Validada em rede real autenticada** (20 vagas técnicas importadas no PostgreSQL 17, 0 erros) |
+| `ADZUNA_API` | Termos configuráveis (`radar.adzuna.termos-busca`) + `sort_by=date` | **Sim** | Obrigatória: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY` (presentes via `.env`) | **Aprovado** (consultas reais, `sort_by=date`, falha 401/403, rejeição de HTTP 200 sem `results`) | **Sim — Validada em rede real autenticada** (24 anúncios recebidos, 20 vagas técnicas importadas no PostgreSQL 17, 0 erros) |
+| `LEVER_BOARD` | `exemplo-lever` (inativa por padrão) | **Sim** | Nenhuma (exige slug de empresa ativa no Lever) | **Aprovado** | **Não** — empresas BR testadas retornaram HTTP 404 por migração de ATS (`EXPERIMENTAL_ATIVAVEL`) |
+| `JSEARCH_API` | `tecnologia-brasil` | **Não** | Desnecessária nesta rodada (`JSEARCH_API_KEY` vazia) | **Aprovado** (retorna `NAO_IMPLEMENTADA`) | **Não aplicável** (`NAO_IMPLEMENTADA`) |
+| `SOLIDES_PORTAL` | `vagas.solides.com.br` | **Não** | Sem API pública documentada | Avaliado | **Bloqueada** (`BLOQUEADA_RESTRICAO_ACESSO` — HTML sem JSON estruturado) |
+| `LINKEDIN` | `linkedin-jobs` | **Não** | Parceria comercial | Avaliado | **Bloqueada** (`BLOQUEADA_RESTRICAO_ACESSO` — Termos de Uso `a1341387`) |
+| `INDEED_GLASSDOOR` | `indeed-glassdoor-br` | **Não** | Sem API aberta gratuita | Avaliado | **Bloqueada** (`BLOQUEADA_RESTRICAO_ACESSO` — Cloudflare / desafio anti-bot) |
 
 ---
 
-## 4. Verificações Realizadas
+## 4. Verificações Executadas
 
-1. **Docker Compose (`docker compose up -d` e `docker compose ps`):**
-   - Container `radar-vagas-postgres` (`postgres:17.12-alpine`) em execução e saudável em `127.0.0.1:5433->5432/tcp`.
-2. **Testes de Comportamento do Backend (`.\mvnw.cmd test`):**
-   - **13 testes executados e aprovados (0 falhas)**:
-     - `GitHubClassificadorESegurancaTest` (4 testes)
-     - `ColetaECatalogoComportamentoTest` (6 testes)
-     - `MultiplasFontesEAgrupamentoTest` (2 testes cobrindo coleta multi-fonte `Greenhouse`, `Gupy __NEXT_DATA__`, `Ashby`, `GitHub Issues`, filtro de cargo técnico, agrupamento conservador entre fontes distintas, filtro por fornecedor e registro explícito de `BLOQUEADA_CREDENCIAL` / `BLOQUEADA_ACESSO`)
-     - `RadarVagasBackendApplicationTests` (1 teste)
-3. **Verificação End-to-End Real no Container Docker PostgreSQL 17:**
-   - Migrações Flyway `V1` e `V2` aplicadas automaticamente no container `radar-vagas-postgres`.
-   - Coleta real executada nas 11 fontes ativas (`5` comunidades GitHub + `1` Gupy Portal Brasil + `4` murais Greenhouse + `1` mural Ashby): todas concluídas com `statusCodigo: SUCESSO` e `errosContagem: 0`, persistindo **42 oportunidades técnicas reais** no banco PostgreSQL 17.
-4. **Testes e Build do Frontend (`npm test` e `npm run build`):**
-   - Testes unitários/comportamentais aprovados via Vitest e bundle de produção compilado sem erros.
-
----
-
-## 5. Limitações e Pendências de Credenciais
-
-1. **Agregadores com Credencial Obrigatória (`BLOQUEADA_CREDENCIAL`):**
-   - **Jooble Brasil (`JOOBLE_API`):** conector implementado em [JoobleConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/JoobleConector.java). Depende da variável de ambiente `JOOBLE_API_KEY` (solicitável gratuitamente em `https://br.jooble.org/api/about`). Quando definida, a fonte passa automaticamente para `ATIVA_VALIDADA`.
-   - **Adzuna Brasil (`ADZUNA_API`):** conector implementado em [AdzunaConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/AdzunaConector.java). Depende das variáveis `ADZUNA_APP_ID` e `ADZUNA_APP_KEY` (registráveis em `https://developer.adzuna.com/overview`). Quando definidas, a fonte passa automaticamente para `ATIVA_VALIDADA`.
-   - **JSearch (`JSEARCH_API`):** mantida como `BLOQUEADA_CREDENCIAL` por exigir chave de API (`JSEARCH_API_KEY`) com cota limitada/planos pagos (nenhum plano foi adquirido, em conformidade com o PRD).
-2. **GitHub Rate Limit sem Token:**
-   - Sem `GITHUB_TOKEN`, a API pública de Issues opera com limite de 60 requisições/hora por IP (com os 5 repositórios ativos consumindo 5 requisições por ciclo completo). Com `GITHUB_TOKEN`, o limite sobe para 5.000 requisições/hora.
-3. **Limitações de Murais Corporativos e Fontes Bloqueadas (`EXPERIMENTAL_ATIVAVEL` / `BLOQUEADA_RESTRICAO_ACESSO`):**
-   - **Murais (`GREENHOUSE_BOARD`, `ASHBY_BOARD`, `LEVER_BOARD`):** exigem configurar os identificadores (`slugs`) das empresas; não substituem uma busca global automática. No Lever ([LeverConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/LeverConector.java)), as empresas brasileiras testadas migraram de plataforma (`HTTP 404`), ficando o conector pronto como `EXPERIMENTAL_ATIVAVEL` caso um slug ativo seja adicionado em [application.yml](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/resources/application.yml).
-   - **Sólides (`SOLIDES_PORTAL`):** bloqueada por ausência de API pública documentada e por não expor dados estruturados (`__NEXT_DATA__` ou JSON-LD de vagas) na resposta HTTP inicial de `vagas.solides.com.br`.
-   - **LinkedIn (`LINKEDIN`):** bloqueado por restrição expressa nos Termos de Uso contra automação e scraping (`a1341387`).
-   - **Indeed e Glassdoor (`INDEED_GLASSDOOR` / JobSpy):** bloqueados por desafio anti-bot / Cloudflare Turnstile, respeitando a regra do PRD de nunca contornar CAPTCHAs ou controles de acesso.
-
----
-
-## 6. Próximo Passo (Etapa 3 do PRD)
-
-- **Etapa 3 — Uso diário:**
-  - Completar filtros combináveis no servidor (área, tecnologia, nível/senioridade, modalidade, localidade e recência de 24h, 3 dias e 7 dias).
-  - Implementar ações pessoais reversíveis (`já me candidatei` e `ocultar por falta de interesse`) com persistência no banco e preservação após novas coletas e reinícios.
-  - Refinar estados de carregamento, erro, ausência de resultados e responsividade para uso diário.
+1. **Testes Automatizados do Backend no Java 25 (`cd backend; .\mvnw.cmd clean test`):**
+   - **20 testes executados e aprovados (0 falhas, 0 erros)** no Java `25.0.3`:
+     - `GitHubClassificadorESegurancaTest` (5 testes, incluindo preservação e idempotência de URL codificada `https://empresa.example/jobs/123?redirect=a%2Fb&utm_source=teste` sem transformar `%2F` em `%252F`).
+     - `ColetaECatalogoComportamentoTest` (6 testes).
+     - `MultiplasFontesEAgrupamentoTest` (2 testes).
+     - `ValidacaoCredenciaisEPaginacaoRegressaoTest` (6 testes cobrindo paginação truncada de 20 itens na página 1 + retomada da vaga de 17/11 na página 2, presença de chave sem marcar fonte validada e preservação de `FALHA_AUTENTICACAO` após reinício, rejeição de HTTP 200 malformado sem array `jobs`/`results`, consultas reais configuráveis com `sort_by=date`, fonte saudável coexistindo com fonte desatualizada sinalizando `Atualização parcial/degradada`, priorização de recência e rotação de blocos no Greenhouse, `JSEARCH_API` como `NAO_IMPLEMENTADA` e carregamento de `.env` sem expor segredos).
+     - `RadarVagasBackendApplicationTests` (1 teste).
+2. **Migrações Flyway (`V1`, `V2`, `V3`) no PostgreSQL 17 (`radar-vagas-postgres` em `127.0.0.1:5433`):**
+   - Migração `V3__continuacao_paginacao_e_validacao.sql` validada junto ao schema JPA (`ddl-auto: validate`).
+3. **Instalação Limpa, Testes e Build do Frontend (`cd frontend; npm ci --no-audit --no-fund; npm test; npm run build`):**
+   - `npm ci --no-audit --no-fund` concluído sem erros com lockfile consistente (`@emnapi/core@1.11.3` e `@emnapi/runtime@1.11.3` presentes).
+   - Testes unitários/comportamentais Vitest aprovados (3 suítes/testes em `app.component.spec.ts`) e build de produção Angular gerado com sucesso.

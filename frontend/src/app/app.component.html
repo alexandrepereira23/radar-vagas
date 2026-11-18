@@ -30,8 +30,8 @@
     <!-- Barra de estado de atualização dos dados -->
     <div
       class="status-banner"
-      [class.status-stale]="statusColeta?.dadosDesatualizados"
-      [class.status-ok]="statusColeta && !statusColeta.dadosDesatualizados"
+      [class.status-stale]="statusColeta?.dadosDesatualizados || statusColeta?.atualizacaoParcial"
+      [class.status-ok]="statusColeta && !statusColeta.dadosDesatualizados && !statusColeta.atualizacaoParcial"
       data-testid="status-coleta-banner">
       <div class="status-banner-text">
         @if (statusColeta) {
@@ -65,28 +65,38 @@
       <section class="diagnostics-panel" data-testid="painel-diagnostico">
         <div class="diagnostics-grid">
           <div>
-            <h3>Registro de Fontes: Ativas, Experimentais e Bloqueadas ({{ statusColeta.fontes.length }})</h3>
+            <h3>Registro de Fontes: Validação, Saúde e Bloqueios ({{ statusColeta.fontes.length }})</h3>
             <div class="exec-table-wrapper">
               <table class="exec-table">
                 <thead>
                   <tr>
-                    <th>Estado</th>
+                    <th>Validação / Saúde</th>
                     <th>Fonte / Mural</th>
                     <th>Método e Credencial</th>
-                    <th>Resultado / Limitação</th>
+                    <th>Evidência / Ação</th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (fonte of statusColeta.fontes; track fonte.id) {
                     <tr>
                       <td>
-                        <span
-                          class="badge"
-                          [class.badge-ok]="fonte.estadoValidacao === 'ATIVA_VALIDADA'"
-                          [class.badge-warn]="fonte.estadoValidacao === 'BLOQUEADA_CREDENCIAL' || fonte.estadoValidacao === 'EXPERIMENTAL_ATIVAVEL'"
-                          [class.badge-err]="fonte.estadoValidacao === 'BLOQUEADA_RESTRICAO_ACESSO'">
-                          {{ rotuloEstadoValidacao(fonte.estadoValidacao) }}
-                        </span>
+                        <div>
+                          <span
+                            class="badge"
+                            [class.badge-ok]="fonte.estadoValidacao === 'ATIVA_VALIDADA'"
+                            [class.badge-warn]="fonte.estadoValidacao === 'CONFIGURADA_NAO_VALIDADA' || fonte.estadoValidacao === 'BLOQUEADA_CREDENCIAL' || fonte.estadoValidacao === 'EXPERIMENTAL_ATIVAVEL' || fonte.estadoValidacao === 'LIMITE_ATINGIDO'"
+                            [class.badge-err]="fonte.estadoValidacao === 'BLOQUEADA_RESTRICAO_ACESSO' || fonte.estadoValidacao === 'FALHA_AUTENTICACAO' || fonte.estadoValidacao === 'FALHA_EXECUCAO' || fonte.estadoValidacao === 'NAO_IMPLEMENTADA'">
+                            {{ rotuloEstadoValidacao(fonte.estadoValidacao) }}
+                          </span>
+                        </div>
+                        @if (fonte.situacaoAtualizacao && fonte.situacaoAtualizacao !== 'INATIVA') {
+                          <div class="muted">
+                            Saúde: {{ rotuloSituacaoAtualizacao(fonte.situacaoAtualizacao) }}
+                            @if (fonte.paginaContinuacao && fonte.paginaContinuacao > 1) {
+                              <span>(pág./bloco {{ fonte.paginaContinuacao }})</span>
+                            }
+                          </div>
+                        }
                       </td>
                       <td>
                         <strong>{{ fonte.nomeExibicao }}</strong>
@@ -102,6 +112,17 @@
                         <div>{{ fonte.observacaoValidacao || '—' }}</div>
                         @if (fonte.ultimaColetaSucessoEm) {
                           <div class="muted">Último sucesso: {{ fonte.ultimaColetaSucessoEm | date:'dd/MM/yyyy HH:mm' }}</div>
+                        }
+                        @if (fonte.ativo) {
+                          <div style="margin-top: 6px;">
+                            <button
+                              type="button"
+                              class="btn btn-small btn-secondary"
+                              [disabled]="executandoColeta"
+                              (click)="executarFonteEspecifica(fonte)">
+                              Coletar esta fonte
+                            </button>
+                          </div>
                         }
                       </td>
                     </tr>
@@ -138,7 +159,7 @@
                           <span
                             class="badge"
                             [class.badge-ok]="exec.statusCodigo === 'SUCESSO'"
-                            [class.badge-warn]="exec.statusCodigo === 'SUCESSO_PARCIAL' || exec.statusCodigo === 'LIMITE_ATINGIDO' || exec.statusCodigo === 'BLOQUEADA_CREDENCIAL'"
+                            [class.badge-warn]="exec.statusCodigo === 'SUCESSO_PARCIAL' || exec.statusCodigo === 'LIMITE_ATINGIDO' || exec.statusCodigo === 'BLOQUEADA_CREDENCIAL' || exec.statusCodigo === 'NAO_IMPLEMENTADA'"
                             [class.badge-err]="exec.statusCodigo === 'FALHA' || exec.statusCodigo === 'BLOQUEADA_ACESSO'">
                             {{ exec.statusRotulo }}
                           </span>

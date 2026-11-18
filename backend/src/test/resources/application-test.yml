@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: ""
   datasource:
     url: jdbc:h2:mem:radar_vagas_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
     username: sa
@@ -42,6 +44,9 @@ radar:
   gupy:
     portal-base-url: http://127.0.0.1:0
     max-itens-por-busca: 10
+    max-paginas-por-execucao: 1
+    termos-busca:
+      - desenvolvedor
   ashby:
     api-base-url: http://127.0.0.1:0
     max-itens-por-mural: 10
