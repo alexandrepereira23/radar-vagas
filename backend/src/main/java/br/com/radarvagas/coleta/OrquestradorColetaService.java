@@ -244,7 +244,8 @@ public class OrquestradorColetaService {
 
 		for (ConfiguracaoFonte fonte : ativas) {
 			Instant ultima = fonte.getUltimaColetaSucessoEm();
-			boolean temContinuacaoPendente = fonte.getPaginaContinuacao() != null && fonte.getPaginaContinuacao() > 1;
+			boolean temContinuacaoPendente = fonte.getEstadoBusca() != null
+					|| (fonte.getPaginaContinuacao() != null && fonte.getPaginaContinuacao() > 1);
 			boolean vencida = temContinuacaoPendente
 					|| (ultima == null)
 					|| Duration.between(ultima, agora).toMinutes() >= Math.max(1, fonte.getCadenciaMinutos());
@@ -423,22 +424,29 @@ public class OrquestradorColetaService {
 				fonte.getMaiorAtualizacaoJanela(),
 				resultado.maiorAtualizacaoObservada()
 		);
+		boolean buscaPaginada = Set.of(AdzunaConector.FORNECEDOR, JoobleConector.FORNECEDOR,
+				GupyPortalConector.FORNECEDOR).contains(fonte.getFornecedor());
+		if (buscaPaginada && errosPersistencia == 0 && statusFinal != StatusExecucaoColeta.BLOQUEADA_CREDENCIAL) {
+			// Inclusive falhas HTTP após páginas já consumidas. Erro de gravação conserva o estado anterior.
+			fonte.setEstadoBusca(resultado.estadoBusca());
+			fonte.setPaginaContinuacao(resultado.proximaPaginaContinuacao());
+		}
 
 		if (statusFinal == StatusExecucaoColeta.SUCESSO || statusFinal == StatusExecucaoColeta.SUCESSO_PARCIAL) {
 			fonte.setUltimaColetaSucessoEm(fim);
 			fonte.setEstadoValidacao("ATIVA_VALIDADA");
 
-			if (errosPersistencia > 0) {
+			if (errosPersistencia > 0 && !buscaPaginada) {
 				// Se houve erro ao persistir item desta página, mantém a página atual para reexecução idempotente
 				fonte.setPaginaContinuacao(paginaAntesDaExecucao);
 				fonte.setCursorJanelaAtual(resultado.cursorJanelaInicio());
 				fonte.setMaiorAtualizacaoJanela(maiorObservadaAcumulada);
-			} else if (resultado.coletaIncompleta() && resultado.proximaPaginaContinuacao() != null) {
+			} else if (errosPersistencia == 0 && resultado.coletaIncompleta() && resultado.proximaPaginaContinuacao() != null) {
 				// Coleta truncada por limite de páginas/volume: salva continuação sem avançar cursorUltimaAtualizacao!
 				fonte.setPaginaContinuacao(resultado.proximaPaginaContinuacao());
 				fonte.setCursorJanelaAtual(resultado.cursorJanelaInicio());
 				fonte.setMaiorAtualizacaoJanela(maiorObservadaAcumulada);
-			} else if (statusFinal == StatusExecucaoColeta.SUCESSO && !resultado.coletaIncompleta()) {
+			} else if (errosPersistencia == 0 && statusFinal == StatusExecucaoColeta.SUCESSO && !resultado.coletaIncompleta()) {
 				// Janela concluída integralmente sem truncamento e sem erros de persistência: avança cursor!
 				if (maiorObservadaAcumulada != null) {
 					fonte.setCursorUltimaAtualizacao(maiorObservadaAcumulada);
@@ -543,7 +551,8 @@ public class OrquestradorColetaService {
 							limiteHorasGlobal * 60L,
 							Math.max(60L, (long) f.getCadenciaMinutos() * 2L)
 					);
-					boolean temContinuacao = f.getPaginaContinuacao() != null && f.getPaginaContinuacao() > 1;
+					boolean temContinuacao = f.getEstadoBusca() != null
+							|| (f.getPaginaContinuacao() != null && f.getPaginaContinuacao() > 1);
 					boolean ultimaFoiParcial = ultimaExecOpt.isPresent()
 							&& ultimaExecOpt.get().getStatus() == StatusExecucaoColeta.SUCESSO_PARCIAL;
 

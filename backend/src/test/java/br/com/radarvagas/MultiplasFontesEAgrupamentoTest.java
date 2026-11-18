@@ -35,7 +35,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
 @ActiveProfiles("test")
-class MultiplasFontesEAgrupamentoTest {
+class MultiplasFontesEAgrupamentoTest extends ColetaTestFixture {
 
 	@Autowired
 	private OrquestradorColetaService orquestradorColetaService;
@@ -65,11 +65,6 @@ class MultiplasFontesEAgrupamentoTest {
 
 	@BeforeEach
 	void setUp() throws IOException {
-		acaoPessoalRepository.deleteAll();
-		anuncioOrigemRepository.deleteAll();
-		oportunidadeRepository.deleteAll();
-		execucaoColetaRepository.deleteAll();
-
 		servidorMultiFonte = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 
 		// 1. Endpoint simulado Greenhouse
@@ -258,7 +253,7 @@ class MultiplasFontesEAgrupamentoTest {
 
 		// 2. Coleta Gupy Portal: 2 vagas no __NEXT_DATA__ (1 vaga aberta + 1 banco de talentos)
 		ExecucaoColetaDto execGupy = orquestradorColetaService.executarFonte(fonteGupy);
-		assertThat(execGupy.statusCodigo()).isEqualTo(StatusExecucaoColeta.SUCESSO.name());
+		assertThat(execGupy.statusCodigo()).isEqualTo(StatusExecucaoColeta.SUCESSO_PARCIAL.name());
 		assertThat(execGupy.anunciosRecebidos()).isEqualTo(2);
 		assertThat(execGupy.anunciosValidos()).isEqualTo(2);
 		assertThat(execGupy.anunciosNovos()).isEqualTo(2);

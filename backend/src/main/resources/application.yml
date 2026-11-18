@@ -71,7 +71,7 @@ radar:
   gupy:
     portal-base-url: ${RADAR_GUPY_PORTAL_BASE_URL:https://portal.gupy.io}
     max-itens-por-busca: ${RADAR_GUPY_MAX_ITENS:20}
-    max-paginas-por-execucao: ${RADAR_GUPY_MAX_PAGINAS:2}
+    max-termos-por-execucao: ${RADAR_GUPY_MAX_TERMOS_POR_EXECUCAO:${RADAR_GUPY_MAX_PAGINAS:2}}
     timeout-segundos: 15
     termos-busca:
       - desenvolvedor
@@ -94,6 +94,9 @@ radar:
     localizacao: ${RADAR_JOOBLE_LOCALIZACAO:Brasil}
     max-itens-por-busca: ${RADAR_JOOBLE_MAX_ITENS:20}
     max-termos-por-execucao: ${RADAR_JOOBLE_MAX_TERMOS_POR_EXECUCAO:3}
+    itens-por-pagina: ${RADAR_JOOBLE_ITENS_POR_PAGINA:20}
+    max-paginas-por-execucao: ${RADAR_JOOBLE_MAX_PAGINAS:3}
+    max-paginas-por-termo: ${RADAR_JOOBLE_MAX_PAGINAS_POR_TERMO:5}
     timeout-segundos: 15
     termos-busca:
       - desenvolvedor software
@@ -108,6 +111,10 @@ radar:
     app-key: ${ADZUNA_APP_KEY:}
     max-itens-por-busca: ${RADAR_ADZUNA_MAX_ITENS:20}
     max-termos-por-execucao: ${RADAR_ADZUNA_MAX_TERMOS_POR_EXECUCAO:2}
+    itens-por-pagina: ${RADAR_ADZUNA_ITENS_POR_PAGINA:20}
+    max-paginas-por-execucao: ${RADAR_ADZUNA_MAX_PAGINAS:2}
+    max-paginas-por-termo: ${RADAR_ADZUNA_MAX_PAGINAS_POR_TERMO:5}
+    janela-dias: ${RADAR_ADZUNA_JANELA_DIAS:7}
     ordenar-por-data: ${RADAR_ADZUNA_ORDENAR_POR_DATA:true}
     timeout-segundos: 15
     termos-busca:
@@ -126,7 +133,7 @@ radar:
       cadencia-minutos: 360
       categoria: PORTAL_BUSCA_AMPLA
       estado-validacao: CONFIGURADA_NAO_VALIDADA
-      metodo-acesso: "HTTP GET portal.gupy.io/job-search/term=... (JSON estruturado __NEXT_DATA__ com rotação de termos/páginas)"
+      metodo-acesso: "HTTP GET portal.gupy.io/job-search/term=... (recorte SSR inicial; rotação de termos, paginação não validada)"
       credencial-necessaria: "Nenhuma (público)"
       observacao-validacao: "Fonte configurada; validação confirmada mediante evidência de coleta bem-sucedida."
     # 2. Murais públicos oficiais no Greenhouse de empresas com operação de tecnologia no Brasil

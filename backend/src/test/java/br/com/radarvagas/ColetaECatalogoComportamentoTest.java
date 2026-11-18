@@ -42,7 +42,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class ColetaECatalogoComportamentoTest {
+class ColetaECatalogoComportamentoTest extends ColetaTestFixture {
 
 	@Autowired
 	private OrquestradorColetaService orquestradorColetaService;
@@ -80,17 +80,6 @@ class ColetaECatalogoComportamentoTest {
 
 	@BeforeEach
 	void setUp() throws IOException {
-		acaoPessoalRepository.deleteAll();
-		anuncioOrigemRepository.deleteAll();
-		oportunidadeRepository.deleteAll();
-		execucaoColetaRepository.deleteAll();
-
-		for (ConfiguracaoFonte cfg : configuracaoFonteRepository.findAll()) {
-			cfg.setUltimaColetaSucessoEm(null);
-			cfg.setCursorUltimaAtualizacao(null);
-			configuracaoFonteRepository.save(cfg);
-		}
-
 		chamadasHttp.set(0);
 		statusCodeResposta.set(200);
 		rateLimitRemainingHeader.set("58");

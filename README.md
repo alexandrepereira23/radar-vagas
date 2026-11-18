@@ -1,154 +1,119 @@
 # Radar de Vagas — Tecnologia no Brasil
 
-Aplicação local para reunir vagas reais e recentes de tecnologia no Brasil a partir de múltiplas fontes, com rastreabilidade de origem, agrupamento conservador, datas honestas e acesso direto à candidatura original.
+Aplicação local para reunir vagas de tecnologia no Brasil, com anúncios de origem rastreáveis, agrupamento conservador, datas honestas e candidatura no site de origem. O catálogo é consultado no banco local; abrir a listagem não dispara coleta externa.
 
----
+## Stack e execução
 
-## Quadro de Fontes: Implementação, Testes Locais e Validação Real
-
-O sistema separa explicitamente **conector implementado**, **configuração/credencial presente**, **teste automatizado local** e **coleta real validada no fornecedor**:
-
-| Fonte / Fornecedor | Conector Implementado? | Credencial Necessária | Teste Local (Servidor Simulado) | Coleta Real no Fornecedor | Estado Inicial sem Coleta Real |
-| --- | --- | --- | --- | --- | --- |
-| **GitHub Issues** (`backend-br/vagas`, `frontendbr/vagas`, `qa-brasil/vagas`, `datascience-br/vagas`, `DevOps-Brasil/Vagas`) | **Sim** ([GitHubIssuesConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GitHubIssuesConector.java)) | Opcional: `GITHUB_TOKEN` (amplia de 60 para 5.000 req/h) | Aprovado (paginação truncada, retomada, rate limit, deduplicação) | **Validada em rede real** nos 5 repositórios (autenticada com `GITHUB_TOKEN`, `rateLimitRestante: 4995`) | `CONFIGURADA_NAO_VALIDADA` até a 1ª coleta com sucesso (`ATIVA_VALIDADA`) |
-| **Gupy Portal Brasil** (`GUPY_PORTAL`) | **Sim** ([GupyPortalConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GupyPortalConector.java)) | Nenhuma (público) | Aprovado (extração SSR `__NEXT_DATA__`, priorização por recência, rotação de termos) | **Validada em rede real** | `CONFIGURADA_NAO_VALIDADA` até a 1ª coleta com sucesso (`ATIVA_VALIDADA`) |
-| **Greenhouse Job Board API** (`quintoandar`, `ebanx`, `vtex`, `wildlifestudios`) | **Sim** ([GreenhouseConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/GreenhouseConector.java)) | Nenhuma (API pública oficial) | Aprovado (priorização por recência, rotação de blocos por limite, filtro técnico BR) | **Validada em rede real** nas 4 empresas | `CONFIGURADA_NAO_VALIDADA` até a 1ª coleta com sucesso (`ATIVA_VALIDADA`) |
-| **Ashby Public Job Posting API** (`supabase`) | **Sim** ([AshbyConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/AshbyConector.java)) | Nenhuma (API pública oficial) | Aprovado (priorização por recência, rotação de blocos, elegibilidade Brasil/AMER) | **Validada em rede real** | `CONFIGURADA_NAO_VALIDADA` até a 1ª coleta com sucesso (`ATIVA_VALIDADA`) |
-| **Jooble Brasil** (`JOOBLE_API`) | **Sim** ([JoobleConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/JoobleConector.java)) | Obrigatória: `JOOBLE_API_KEY` | Aprovado (termos reais configuráveis, rejeição de HTTP 401/403 e HTTP 200 malformado sem `jobs`) | **Validada em rede real** com `JOOBLE_API_KEY` local (20 vagas técnicas importadas, 0 erros) | `BLOQUEADA_CREDENCIAL` sem chave; `CONFIGURADA_NAO_VALIDADA` com chave até coleta real ter sucesso (`ATIVA_VALIDADA`) |
-| **Adzuna Brasil** (`ADZUNA_API`) | **Sim** ([AdzunaConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/AdzunaConector.java)) | Obrigatória: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY` | Aprovado (termos configuráveis, `sort_by=date`, rejeição de 401/403 e HTTP 200 sem `results`) | **Validada em rede real** com `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` locais (24 recebidas, 20 vagas técnicas importadas, 0 erros) | `BLOQUEADA_CREDENCIAL` sem chaves; `CONFIGURADA_NAO_VALIDADA` com chaves até coleta real ter sucesso (`ATIVA_VALIDADA`) |
-| **Lever Postings API** (`LEVER_BOARD`) | **Sim** ([LeverConector.java](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/java/br/com/radarvagas/coleta/LeverConector.java)) | Nenhuma (requer slug de empresa ativa no Lever) | Aprovado | Empresas BR testadas retornaram HTTP 404 por migração de ATS | `EXPERIMENTAL_ATIVAVEL` (inativa até configurar slug válido) |
-| **JSearch / OpenWebNinja** (`JSEARCH_API`) | **Não implementado** | Desnecessária nesta rodada (deixar `JSEARCH_API_KEY` vazia; não contratar plano) | Registro de fonte `NAO_IMPLEMENTADA` testado | Não aplicável (sem conector implementado) | `NAO_IMPLEMENTADA` |
-| **Sólides Portal** (`SOLIDES_PORTAL`) | Não (bloqueio técnico) | Sem API pública documentada | Avaliado | HTML inicial não expõe `__NEXT_DATA__` nem JSON estruturado | `BLOQUEADA_RESTRICAO_ACESSO` |
-| **LinkedIn Vagas** (`LINKEDIN`) | Não (termos de uso) | Parceria comercial | Avaliado | Automação proibida pelos Termos do LinkedIn (`a1341387`) | `BLOQUEADA_RESTRICAO_ACESSO` |
-| **Indeed / Glassdoor** (`INDEED_GLASSDOOR`) | Não (proteção anti-bot) | Sem API aberta gratuita | Avaliado | Protegido por Cloudflare/desafio anti-bot (proibido contornar CAPTCHA) | `BLOQUEADA_RESTRICAO_ACESSO` |
-
----
-
-## Arquitetura e Stack
-
-| Camada | Tecnologia e Versão Fixada |
+| Camada | Versão |
 | --- | --- |
-| **Backend** | Java 25 LTS + Spring Boot `4.1.2` (WebMVC, Data JPA, Validation, Flyway) |
-| **Banco de Dados** | PostgreSQL `17.12-alpine` via Docker Compose em `127.0.0.1:5433` + migrações Flyway (`V1`, `V2`, `V3`) |
-| **Frontend** | Angular `21.2.26` (`@angular/cli` `21.2.14`, TypeScript `5.9.3`, Vitest `4.0.8`) |
-| **Segurança** | Bind exclusivo em `127.0.0.1`, sanitização de HTML, preservação idempotente de URLs codificadas, bloqueio de URLs locais/privadas e redaction de segredos |
+| Backend | Java 25, Spring Boot `4.1.2`, Maven Wrapper |
+| Banco | PostgreSQL `17.12-alpine`, Flyway V1–V4 |
+| Frontend | Angular `21.2.26`, CLI `21.2.14`, TypeScript `5.9.3`, Vitest `4.0.8` |
 
----
-
-## 1. Carregamento Local de Configuração (`.env`) e Credenciais
-
-### Como o `.env` é carregado pelo Backend
-
-O arquivo [application.yml](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/backend/src/main/resources/application.yml) configura nativamente o Spring Boot para importar o arquivo `.env` no formato `KEY=value`:
-
-```yaml
-spring:
-  config:
-    import:
-      - optional:file:./.env[.properties]
-      - optional:file:../.env[.properties]
-```
-
-Isso garante carregamento único e previsível independentemente do diretório de trabalho:
-- **Executando a partir de `backend/`** (`cd backend; .\mvnw.cmd spring-boot:run`): o Spring Boot lê automaticamente `../.env` (na raiz do repositório).
-- **Executando a partir da raiz do projeto** (`.\backend\mvnw.cmd -f backend/pom.xml spring-boot:run`): o Spring Boot lê automaticamente `./.env` (na raiz do repositório).
-- O arquivo `.env` permanece listado no [.gitignore](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/.gitignore) e seus valores nunca são exibidos nos logs nem na API `/api/coletas/status`.
-
-### Passo a passo para configurar o `.env` localmente
-
-1. Na raiz do projeto, crie `.env` a partir de [.env.example](file:///C:/Users/Alexandre_HP/Documents/radar-vagas/.env.example) caso ainda não exista:
-   ```powershell
-   if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-   ```
-2. Edite o arquivo `.env` localmente (nunca cole segredos no chat nem em commits):
-   - **`GITHUB_TOKEN` (Opcional — GitHub Issues):**
-     - Crie um *Fine-grained personal access token* em `https://github.com/settings/personal-access-tokens/new` com acesso somente a repositórios públicos (*Public repositories*), sem permissões de escrita. Amplia o limite de 60 req/h para 5.000 req/h.
-   - **`JOOBLE_API_KEY` (Agregador Jooble Brasil):**
-     - Solicite a chave gratuita para o domínio brasileiro em `https://br.jooble.org/api/about` (cota gratuita informada pela documentação: 100 requisições/dia).
-   - **`ADZUNA_APP_ID` e `ADZUNA_APP_KEY` (Agregador Adzuna Brasil):**
-     - Cadastre uma aplicação gratuita em `https://developer.adzuna.com/signup` e copie `app_id` e `app_key` do painel. Para preservar as chamadas de teste da conta durante a validação, mantenha `RADAR_COLETA_AGENDAMENTO_ATIVO=false` no `.env` e dispare a coleta manualmente apenas para a fonte desejada.
-   - **`JSEARCH_API_KEY`:**
-     - **Deixe vazia.** O conector JSearch ainda não foi implementado nesta versão; preencher esta variável não ativa a fonte. Não contrate assinatura paga.
-
----
-
-## 2. Como Iniciar o Ambiente Local
-
-### Passo 2.1 — Subir o PostgreSQL com Docker Compose
+Na raiz, com Docker ativo:
 
 ```powershell
 docker compose up -d
 docker compose ps
 ```
 
-> O container `radar-vagas-postgres` escuta em `127.0.0.1:5433` para não conflitar com instalações locais do PostgreSQL na porta `5432`.
-
-### Passo 2.2 — Iniciar o Backend (`http://127.0.0.1:8080`)
+O PostgreSQL do Compose atende em `127.0.0.1:5433`. Em um terminal com `JAVA_HOME` apontando para um JDK 25:
 
 ```powershell
 cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-> Reinicie o backend sempre que alterar chaves no arquivo `.env` da raiz.
-
-### Passo 2.3 — Instalar e Iniciar o Frontend (`http://127.0.0.1:4200`)
+Em outro terminal:
 
 ```powershell
 cd frontend
-npm ci
+npm ci --no-audit --no-fund
 npm start
 ```
 
-Acesse `http://127.0.0.1:4200` no navegador.
+Interface: `http://127.0.0.1:4200`. API: `http://127.0.0.1:8080`.
 
----
+### Configuração local
 
-## 3. Como Coletar e Verificar se Cada Integração Funcionou
+Use [.env.example](.env.example) como referência. O backend importa opcionalmente `./.env` e `../.env` como properties, permitindo iniciar da raiz ou de `backend/`. Variáveis de ambiente também são aceitas. Reinicie o backend após alterar a configuração.
 
-A presença de uma chave no `.env` apenas **habilita** a fonte com estado `CONFIGURADA_NAO_VALIDADA`. Uma fonte só passa para `ATIVA_VALIDADA` após uma execução de coleta retornar HTTP 2xx com a estrutura JSON esperada (`jobs` no Jooble, `results` no Adzuna, array JSON no GitHub, etc.).
+- GitHub: `GITHUB_TOKEN` opcional.
+- Jooble: `JOOBLE_API_KEY`.
+- Adzuna: `ADZUNA_APP_ID` e `ADZUNA_APP_KEY`.
+- JSearch: não implementado; preencher `JSEARCH_API_KEY` não ativa a fonte.
+- `RADAR_COLETA_AGENDAMENTO_ATIVO=false` desativa o agendamento para uso exclusivamente manual.
 
-- **Pela interface web (`http://127.0.0.1:4200`):**
-  1. Clique em **"Ver fontes, bloqueios e coletas"**.
-  2. Verifique a coluna **Validação / Saúde**:
-     - `Configurada (aguarda coleta)`: credencial carregada do `.env`, aguardando a primeira execução.
-     - `Validada por coleta`: acesso e estrutura comprovados com timestamp de último sucesso.
-     - `Erro de autenticação/chave`: fornecedor rejeitou a credencial (`HTTP 401/403`); verifique a chave no `.env`.
-     - `Falha na última coleta` / `Limite atingido`: erro de rede, HTTP 5xx, payload HTTP 200 malformado ou rate limit (`HTTP 429`).
-     - `Conector não implementado`: exibido para `JSEARCH_API`.
-  3. Para testar apenas um fornecedor recém-configurado (ex.: Jooble ou Adzuna) sem gastar cota das outras fontes, clique no botão **"Coletar esta fonte"** na linha correspondente da tabela de diagnóstico.
+Credencial presente apenas habilita a tentativa (`CONFIGURADA_NAO_VALIDADA`). A validação depende de uma resposta válida coletada e persistida; falhas de autenticação, limite e execução ficam registradas entre reinícios. A API expõe apenas `credencialConfigurada`, nunca o valor da chave.
 
-- **Via linha de comando (API REST):**
+## Fontes e alcance
 
-  ```powershell
-  # 1. Consultar status global, saúde individual por fonte e se a credencial foi carregada (credencialConfigurada: true/false)
-  Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/coletas/status" | ConvertTo-Json -Depth 5
+| Fonte | Implementação e recorte atual | Evidência desta revisão |
+| --- | --- | --- |
+| GitHub Issues | 5 comunidades configuradas; paginação real e janela incremental persistidas | Testes HTTP locais de paginação, retomada, idempotência e rate limit |
+| Adzuna Brasil | `/search/{page}`, `count`, `results_per_page`, ordenação por data e janela recente | Documentação oficial consultada; páginas seguintes e retomada verificadas com HTTP local |
+| Jooble Brasil | `page`, `ResultOnPage`, `totalCount`; profundidade limitada | Páginas seguintes e retomada verificadas com HTTP local; documentação pública retornou 403 nesta rodada; paginação autenticada real ainda não revalidada |
+| Gupy Portal | Somente lista SSR inicial de cada termo (`__NEXT_DATA__`); rotação de termos e consumo da sobra persistidos | HTML público acessível; mecanismo de paginação público e permitido **não validado**; sempre informa coleta parcial |
+| Greenhouse, Ashby, Lever | Murais por empresa, com limites locais e rotação de blocos | Regressões existentes preservadas; não representam busca global |
+| JSearch | Não implementado | Estado `NAO_IMPLEMENTADA` testado |
+| Sólides, LinkedIn, Indeed/Glassdoor | Sem conector; bloqueios previamente registrados | Sem nova validação de acesso nesta revisão |
 
-  # 2. Disparar coleta manual em uma fonte específica pelo ID (ex.: testar apenas Jooble ou Adzuna)
-  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/coletas/executar/1" | ConvertTo-Json -Depth 5
+O histórico anterior registra coletas reais de GitHub, Gupy, Greenhouse, Ashby, Jooble e Adzuna. **Não foram repetidas nesta revisão**, que não utilizou credenciais reais. Testes simulados não comprovam cobertura nem acesso autenticado atual. Veja [STATUS.md](STATUS.md).
 
-  # 3. Disparar coleta manual em todas as fontes ativas
-  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8080/api/coletas/executar" | ConvertTo-Json -Depth 5
+## Continuação, cotas e critérios de parada
 
-  # 4. Consultar vagas paginadas
-  Invoke-RestMethod -Uri "http://127.0.0.1:8080/api/vagas?page=0&size=15" | ConvertTo-Json -Depth 5
-  ```
+A migração [V4](backend/src/main/resources/db/migration/V4__estado_busca_paginada.sql) acrescenta `configuracao_fonte.estado_busca`. Para Adzuna, Jooble e Gupy, esse estado contém a lista de termos do ciclo, índice do termo, página, tamanho de página, início do ciclo, itens ainda não consumidos e indicação de recorte.
 
----
+- O corte de `max-itens-por-busca` guarda a **sobra da resposta recebida**, inclusive no último/único termo. A próxima execução consome essa sobra antes de consultar outra página. Ela não depende de reencontrar o mesmo prefixo numa resposta que pode ter mudado.
+- O estado guarda somente a página pendente, sem credenciais; é substituído à medida que avança e removido ao encerrar o ciclo. Não há arquivo histórico de respostas. Uma execução que apenas consome a sobra pode ter anúncios válidos com zero novos anúncios recebidos por HTTP.
+- `pagina_continuacao` passa a representar a página do termo atual; o termo e a posição restante ficam em `estado_busca`. Estados legados V3 sem JSON são interpretados como índice do termo para a primeira retomada.
+- Alterar termos ou tamanho de página durante uma busca não invalida a resposta já recebida: a lista e o tamanho persistidos valem até terminar esse ciclo.
+- Limite de volume, termos ou requisições adia o trabalho com `SUCESSO_PARCIAL`. Erro HTTP mantém a página que falhou. Falha de persistência conserva o estado anterior para reexecução idempotente; anúncios já gravados não são recriados. A ausência temporária de credencial também preserva os itens adiados.
+- Adzuna usa `count`; Jooble usa `totalCount`. Uma contagem ausente/inconsistente, resposta acima do tamanho solicitado ou teto de profundidade produz recorte explícito. Sem contagem, uma página cheia permite prosseguir dentro da cota, mas não comprova completude.
+- O teto de páginas por termo encerra **o recorte configurado** e passa ao próximo termo, mantendo o ciclo parcial. Ele não agenda a importação de todo o histórico. O próximo ciclo começa da primeira página.
+- Conclusão significa percorrer os resultados indicados pela fonte para os termos/janela configurados, sem sobra nem recorte conhecido. Paginação por número não é snapshot transacional do fornecedor: inserções/remoções entre páginas podem mover resultados. Novos ciclos se sobrepõem e a identidade de origem no banco evita duplicação, mas não há garantia de cobertura integral de um feed mutável.
+- Gupy sempre retorna `SUCESSO_PARCIAL`, mesmo após consumir toda a lista inicial. A ordenação local por `publishedDate` prioriza somente os anúncios dessa resposta. Sem sobra, aguarda a cadência normal para um novo ciclo; não inventa páginas nem contorna bloqueios.
 
-## 4. Como Executar os Testes Automatizados e o Build
+### Limites padrão configuráveis
 
-Os testes automatizados utilizam servidores HTTP locais efêmeros e banco em memória (`@ActiveProfiles("test")`, com `spring.config.import` isolado), sem disparar chamadas externas pagas nem consumir cotas de fornecedores:
+| Configuração | Adzuna | Jooble | Gupy |
+| --- | --- | --- | --- |
+| `max-itens-por-busca` (válidos únicos por execução) | 20 | 20 | 20 |
+| `itens-por-pagina` (independente do orçamento local) | 20 (até 50) | 20 (até 100) | Lista SSR do portal |
+| `max-termos-por-execucao` | 2 | 3 | 2 |
+| `max-paginas-por-execucao` (requisições HTTP) | 2 | 3 | Não há paginação validada |
+| `max-paginas-por-termo` (profundidade do recorte) | 5 | 5 | Apenas a lista inicial |
+| Janela de publicação | `janela-dias=7` via `max_days_old` | Janela/ordenação recente não validada | Janela/ordenação global não validada |
+
+Prefixos Spring: `radar.adzuna`, `radar.jooble`, `radar.gupy`. As variáveis correspondentes estão em [application.yml](backend/src/main/resources/application.yml): `RADAR_ADZUNA_MAX_ITENS`, `RADAR_ADZUNA_ITENS_POR_PAGINA`, `RADAR_ADZUNA_MAX_TERMOS_POR_EXECUCAO`, `RADAR_ADZUNA_MAX_PAGINAS`, `RADAR_ADZUNA_MAX_PAGINAS_POR_TERMO`, `RADAR_ADZUNA_JANELA_DIAS` e equivalentes `RADAR_JOOBLE_*` (exceto janela). Gupy usa `RADAR_GUPY_MAX_ITENS` e `RADAR_GUPY_MAX_TERMOS_POR_EXECUCAO`; o antigo `RADAR_GUPY_MAX_PAGINAS` é aceito como fallback de **termos**, não como paginação.
+
+A janela Adzuna é relativa ao momento da requisição; durante uma retomada, a idade máxima aumenta pelos dias completos decorridos desde o início do ciclo. A API não oferece snapshot fixo nesta integração. Termos são configuráveis via `radar.<fonte>.termos-busca`.
+
+## Coletar e consultar
+
+Na interface, abra **Ver fontes, bloqueios e coletas** para consultar saúde e executar uma fonte individualmente. A saúde global considera falhas, fontes desatualizadas e continuação pendente, inclusive na página 1.
 
 ```powershell
-# Backend (20 testes de comportamento e regressão no Java 25 + empacotamento JAR)
-cd backend
+Invoke-RestMethod "http://127.0.0.1:8080/api/coletas/status" | ConvertTo-Json -Depth 5
+# Substitua 1 pelo ID informado no status para coletar somente a fonte desejada.
+Invoke-RestMethod -Method Post "http://127.0.0.1:8080/api/coletas/executar/1"
+Invoke-RestMethod "http://127.0.0.1:8080/api/vagas?page=0&size=15"
+```
+
+## Testes e build
+
+Os testes usam H2 e servidores HTTP locais efêmeros. O perfil `test` não importa `.env`; propriedades e fontes persistidas são reconstruídas antes de cada método de coleta.
+
+```powershell
+# Em backend/, com JAVA_HOME apontando para Java 25
 .\mvnw.cmd clean test
+.\mvnw.cmd test -Dtest=ColetaECatalogoComportamentoTest
 .\mvnw.cmd package -DskipTests
 
-# Frontend (instalação limpa reproduzível + testes Vitest + build de produção)
-cd ..\frontend
+# Em frontend/
 npm ci --no-audit --no-fund
 npm test
 npm run build
 ```
+
+Verificado em 18/11/2026: **30 testes backend aprovados** com ordem inversa das classes, **6 testes da classe isolada aprovados**, JAR gerado no Java **25.0.5**, instalação limpa de **480 pacotes**, **3 testes frontend aprovados** e bundle de produção gerado. V1–V4 passaram no H2 com validação JPA. PostgreSQL 17 não foi exercitado nesta rodada porque o daemon Docker estava indisponível.

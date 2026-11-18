@@ -62,6 +62,13 @@ public class ConfiguracaoFonte {
 	@Column(name = "pagina_continuacao")
 	private Integer paginaContinuacao;
 
+	@Column(name = "estado_busca", columnDefinition = "text")
+	private String estadoBusca;
+
+	public String getEstadoBusca() { return estadoBusca; }
+
+	public void setEstadoBusca(String estadoBusca) { this.estadoBusca = estadoBusca; }
+
 	@Column(name = "cursor_janela_atual")
 	private Instant cursorJanelaAtual;
 

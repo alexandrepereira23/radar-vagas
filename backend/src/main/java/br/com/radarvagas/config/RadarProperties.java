@@ -268,6 +268,9 @@ public class RadarProperties {
 		private int maxItensPorBusca = 20;
 		private int maxPaginasPorExecucao = 2;
 		private int timeoutSegundos = 15;
+		// Nome legado mantido apenas como alias de configuração para rotação de termos.
+		public int getMaxTermosPorExecucao() { return maxPaginasPorExecucao; }
+		public void setMaxTermosPorExecucao(int valor) { maxPaginasPorExecucao = valor; }
 		private List<String> termosBusca = new ArrayList<>(List.of(
 				"desenvolvedor",
 				"qa",
@@ -379,6 +382,15 @@ public class RadarProperties {
 	}
 
 	public static class Jooble {
+		private int itensPorPagina = 20;
+		private int maxPaginasPorExecucao = 3;
+		private int maxPaginasPorTermo = 5;
+		public int getItensPorPagina() { return itensPorPagina; }
+		public void setItensPorPagina(int valor) { itensPorPagina = valor; }
+		public int getMaxPaginasPorExecucao() { return maxPaginasPorExecucao; }
+		public void setMaxPaginasPorExecucao(int valor) { maxPaginasPorExecucao = valor; }
+		public int getMaxPaginasPorTermo() { return maxPaginasPorTermo; }
+		public void setMaxPaginasPorTermo(int valor) { maxPaginasPorTermo = valor; }
 		private String apiBaseUrl = "https://br.jooble.org";
 		private String apiKey = "";
 		private String localizacao = "Brasil";
@@ -452,6 +464,18 @@ public class RadarProperties {
 	}
 
 	public static class Adzuna {
+		private int itensPorPagina = 20;
+		private int maxPaginasPorExecucao = 2;
+		private int maxPaginasPorTermo = 5;
+		private int janelaDias = 7;
+		public int getItensPorPagina() { return itensPorPagina; }
+		public void setItensPorPagina(int valor) { itensPorPagina = valor; }
+		public int getMaxPaginasPorExecucao() { return maxPaginasPorExecucao; }
+		public void setMaxPaginasPorExecucao(int valor) { maxPaginasPorExecucao = valor; }
+		public int getMaxPaginasPorTermo() { return maxPaginasPorTermo; }
+		public void setMaxPaginasPorTermo(int valor) { maxPaginasPorTermo = valor; }
+		public int getJanelaDias() { return janelaDias; }
+		public void setJanelaDias(int valor) { janelaDias = valor; }
 		private String apiBaseUrl = "https://api.adzuna.com";
 		private String appId = "";
 		private String appKey = "";

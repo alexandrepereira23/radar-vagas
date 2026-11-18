@@ -53,7 +53,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class ValidacaoCredenciaisEPaginacaoRegressaoTest {
+class ValidacaoCredenciaisEPaginacaoRegressaoTest extends ColetaTestFixture {
 
 	@Autowired
 	private OrquestradorColetaService orquestradorColetaService;
@@ -86,15 +86,6 @@ class ValidacaoCredenciaisEPaginacaoRegressaoTest {
 
 	@BeforeEach
 	void setUp() throws IOException {
-		acaoPessoalRepository.deleteAll();
-		anuncioOrigemRepository.deleteAll();
-		oportunidadeRepository.deleteAll();
-		execucaoColetaRepository.deleteAll();
-		configuracaoFonteRepository.deleteAll();
-
-		radarProperties.setFontesRegistradas(new ArrayList<>());
-		orquestradorColetaService.inicializarFontesERecuperarInterrompidas();
-
 		servidorTeste = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 	}
 
@@ -103,13 +94,6 @@ class ValidacaoCredenciaisEPaginacaoRegressaoTest {
 		if (servidorTeste != null) {
 			servidorTeste.stop(0);
 		}
-		radarProperties.getGithub().setItensPorPagina(10);
-		radarProperties.getGithub().setMaxPaginasPorExecucao(2);
-		radarProperties.getGithub().setToken("");
-		radarProperties.getJooble().setApiKey("");
-		radarProperties.getAdzuna().setAppId("");
-		radarProperties.getAdzuna().setAppKey("");
-		radarProperties.getGreenhouse().setMaxItensPorMural(10);
 	}
 
 	@Test
@@ -363,7 +347,7 @@ class ValidacaoCredenciaisEPaginacaoRegressaoTest {
 		// 2. Quando o fornecedor responde HTTP 200 com o array válido, a coleta funciona e valida a fonte
 		corpoJooble.set("""
 				{
-				  "jobs": [
+				  "totalCount": 1, "jobs": [
 				    {
 				      "id": "jb-101",
 				      "title": "Pessoa Desenvolvedora Backend Java Pleno",
@@ -377,7 +361,7 @@ class ValidacaoCredenciaisEPaginacaoRegressaoTest {
 				""");
 		corpoAdzuna.set("""
 				{
-				  "results": [
+				  "count": 1, "results": [
 				    {
 				      "id": "adz-202",
 				      "title": "Engenheiro de Dados Python / SQL",
@@ -394,16 +378,17 @@ class ValidacaoCredenciaisEPaginacaoRegressaoTest {
 		ExecucaoColetaDto execJoobleValido = orquestradorColetaService.executarFonte(
 				configuracaoFonteRepository.findById(fonteJooble.getId()).orElseThrow()
 		);
-		// Como Jooble tem 2 termos configurados e maxTermosPorExecucao=1, a 1ª execução válida retorna SUCESSO_PARCIAL e agenda o termo 2
+		// Um termo por execução: termo 2 / página 1 fica no estado de busca persistido.
 		assertThat(execJoobleValido.statusCodigo()).isEqualTo(StatusExecucaoColeta.SUCESSO_PARCIAL.name());
 		assertThat(execJoobleValido.anunciosNovos()).isEqualTo(1);
 
 		ConfiguracaoFonte joobleValidada = configuracaoFonteRepository.findById(fonteJooble.getId()).orElseThrow();
 		assertThat(joobleValidada.getEstadoValidacao()).isEqualTo("ATIVA_VALIDADA");
 		assertThat(joobleValidada.getUltimaColetaSucessoEm()).isNotNull();
-		assertThat(joobleValidada.getPaginaContinuacao()).isEqualTo(2);
+		assertThat(joobleValidada.getPaginaContinuacao()).isEqualTo(1);
+		assertThat(joobleValidada.getEstadoBusca()).contains("qa testes");
 
-		// Na 2ª execução do Jooble, consulta o 2º termo ('qa testes') e encerra o ciclo de termos com SUCESSO
+		// Na 2ª execução consulta 'qa testes' e conclui o ciclo indicado por totalCount.
 		ExecucaoColetaDto execJoobleTermo2 = orquestradorColetaService.executarFonte(joobleValidada);
 		assertThat(execJoobleTermo2.statusCodigo()).isEqualTo(StatusExecucaoColeta.SUCESSO.name());
 		assertThat(payloadsRecebidosJooble.get(2)).contains("qa testes");
