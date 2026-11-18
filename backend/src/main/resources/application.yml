@@ -1,0 +1,225 @@
+spring:
+  application:
+    name: radar-vagas-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5433/radar_vagas}
+    username: ${SPRING_DATASOURCE_USERNAME:radar_vagas}
+    password: ${SPRING_DATASOURCE_PASSWORD:radar_vagas_local}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
+
+radar:
+  cors:
+    origens-permitidas: ${RADAR_CORS_ORIGENS:http://127.0.0.1:4200,http://localhost:4200}
+  coleta:
+    agendamento-ativo: ${RADAR_COLETA_AGENDAMENTO_ATIVO:true}
+    intervalo-verificacao-ms: ${RADAR_COLETA_INTERVALO_MS:300000}
+    desatualizado-apos-horas: ${RADAR_COLETA_DESATUALIZADO_APOS_HORAS:12}
+  github:
+    api-base-url: ${RADAR_GITHUB_API_BASE_URL:https://api.github.com}
+    token: ${GITHUB_TOKEN:}
+    user-agent: ${RADAR_GITHUB_USER_AGENT:radar-vagas-local/0.2}
+    itens-por-pagina: ${RADAR_GITHUB_ITENS_POR_PAGINA:20}
+    max-paginas-por-execucao: ${RADAR_GITHUB_MAX_PAGINAS:1}
+    sobreposicao-incremental-minutos: ${RADAR_GITHUB_SOBREPOSICAO_MINUTOS:60}
+    max-tentativas: ${RADAR_GITHUB_MAX_TENTATIVAS:2}
+    espera-inicial-ms: ${RADAR_GITHUB_ESPERA_INICIAL_MS:500}
+    timeout-segundos: ${RADAR_GITHUB_TIMEOUT_SEGUNDOS:15}
+    repositorios:
+      - identificador: backend-br/vagas
+        nome-exibicao: Comunidade Backend Brasil
+        ativo: true
+        cadencia-minutos: 360
+      - identificador: frontendbr/vagas
+        nome-exibicao: Comunidade Frontend Brasil
+        ativo: true
+        cadencia-minutos: 360
+      - identificador: qa-brasil/vagas
+        nome-exibicao: Comunidade QA Brasil
+        ativo: true
+        cadencia-minutos: 360
+      - identificador: datascience-br/vagas
+        nome-exibicao: Comunidade Data Science Brasil
+        ativo: true
+        cadencia-minutos: 360
+      - identificador: DevOps-Brasil/Vagas
+        nome-exibicao: Comunidade DevOps Brasil
+        ativo: true
+        cadencia-minutos: 360
+  greenhouse:
+    api-base-url: ${RADAR_GREENHOUSE_API_BASE_URL:https://boards-api.greenhouse.io}
+    max-itens-por-mural: ${RADAR_GREENHOUSE_MAX_ITENS:25}
+    timeout-segundos: 15
+  gupy:
+    portal-base-url: ${RADAR_GUPY_PORTAL_BASE_URL:https://portal.gupy.io}
+    max-itens-por-busca: ${RADAR_GUPY_MAX_ITENS:15}
+    timeout-segundos: 15
+  ashby:
+    api-base-url: ${RADAR_ASHBY_API_BASE_URL:https://api.ashbyhq.com}
+    max-itens-por-mural: ${RADAR_ASHBY_MAX_ITENS:25}
+    timeout-segundos: 15
+  lever:
+    api-base-url: ${RADAR_LEVER_API_BASE_URL:https://api.lever.co}
+    max-itens-por-mural: ${RADAR_LEVER_MAX_ITENS:25}
+    timeout-segundos: 15
+  jooble:
+    api-base-url: ${RADAR_JOOBLE_API_BASE_URL:https://br.jooble.org}
+    api-key: ${JOOBLE_API_KEY:}
+    max-itens-por-busca: ${RADAR_JOOBLE_MAX_ITENS:20}
+    timeout-segundos: 15
+  adzuna:
+    api-base-url: ${RADAR_ADZUNA_API_BASE_URL:https://api.adzuna.com}
+    app-id: ${ADZUNA_APP_ID:}
+    app-key: ${ADZUNA_APP_KEY:}
+    max-itens-por-busca: ${RADAR_ADZUNA_MAX_ITENS:20}
+    timeout-segundos: 15
+  fontes-registradas:
+    # 1. Busca ampla no Brasil via dados estruturados SSR (__NEXT_DATA__) do portal público Gupy
+    - fornecedor: GUPY_PORTAL
+      identificador: desenvolvedor
+      nome-exibicao: "Gupy Portal Brasil (Busca: desenvolvedor)"
+      ativo: true
+      cadencia-minutos: 360
+      categoria: PORTAL_BUSCA_AMPLA
+      estado-validacao: ATIVA_VALIDADA
+      metodo-acesso: "HTTP GET portal.gupy.io/job-search/term=... (JSON estruturado __NEXT_DATA__)"
+      credencial-necessaria: "Nenhuma (público)"
+      observacao-validacao: "Validado com teste real no Brasil. Extrai JSON SSR sem navegador automatizado."
+    # 2. Murais públicos oficiais no Greenhouse de empresas com operação de tecnologia no Brasil
+    - fornecedor: GREENHOUSE_BOARD
+      identificador: quintoandar
+      nome-exibicao: "Greenhouse • QuintoAndar"
+      ativo: true
+      cadencia-minutos: 360
+      categoria: MURAL_EMPRESA
+      estado-validacao: ATIVA_VALIDADA
+      metodo-acesso: "API REST Oficial (boards-api.greenhouse.io/v1/boards/quintoandar/jobs?content=true)"
+      credencial-necessaria: "Nenhuma (API pública oficial)"
+      observacao-validacao: "Validado com teste real. Filtra cargos técnicos elegíveis no Brasil."
+    - fornecedor: GREENHOUSE_BOARD
+      identificador: ebanx
+      nome-exibicao: "Greenhouse • EBANX"
+      ativo: true
+      cadencia-minutos: 360
+      categoria: MURAL_EMPRESA
+      estado-validacao: ATIVA_VALIDADA
+      metodo-acesso: "API REST Oficial (boards-api.greenhouse.io/v1/boards/ebanx/jobs?content=true)"
+      credencial-necessaria: "Nenhuma (API pública oficial)"
+      observacao-validacao: "Validado com teste real. Filtra cargos técnicos elegíveis no Brasil."
+    - fornecedor: GREENHOUSE_BOARD
+      identificador: vtex
+      nome-exibicao: "Greenhouse • VTEX"
+      ativo: true
+      cadencia-minutos: 360
+      categoria: MURAL_EMPRESA
+      estado-validacao: ATIVA_VALIDADA
+      metodo-acesso: "API REST Oficial (boards-api.greenhouse.io/v1/boards/vtex/jobs?content=true)"
+      credencial-necessaria: "Nenhuma (API pública oficial)"
+      observacao-validacao: "Validado com teste real. Filtra cargos técnicos elegíveis no Brasil."
+    - fornecedor: GREENHOUSE_BOARD
+      identificador: wildlifestudios
+      nome-exibicao: "Greenhouse • Wildlife Studios"
+      ativo: true
+      cadencia-minutos: 360
+      categoria: MURAL_EMPRESA
+      estado-validacao: ATIVA_VALIDADA
+      metodo-acesso: "API REST Oficial (boards-api.greenhouse.io/v1/boards/wildlifestudios/jobs?content=true)"
+      credencial-necessaria: "Nenhuma (API pública oficial)"
+      observacao-validacao: "Validado com teste real. Filtra cargos técnicos elegíveis no Brasil."
+    # 3. Mural público oficial na Ashby (filtra vagas técnicas elegíveis para Brasil / LATAM / Americas)
+    - fornecedor: ASHBY_BOARD
+      identificador: supabase
+      nome-exibicao: "Ashby • Supabase"
+      ativo: true
+      cadencia-minutos: 360
+      categoria: MURAL_EMPRESA
+      estado-validacao: ATIVA_VALIDADA
+      metodo-acesso: "API REST Oficial (api.ashbyhq.com/posting-api/job-board/supabase)"
+      credencial-necessaria: "Nenhuma (API pública oficial)"
+      observacao-validacao: "Validado com teste real. Importa apenas cargos técnicos elegíveis para Brasil/AMER."
+    # 4. Agregadores de busca ampla (conector implementado; requerem credencial de API do proprietário)
+    - fornecedor: JOOBLE_API
+      identificador: tecnologia-brasil
+      nome-exibicao: "Jooble Brasil (Agregador)"
+      ativo: false
+      cadencia-minutos: 360
+      categoria: AGREGADOR
+      estado-validacao: BLOQUEADA_CREDENCIAL
+      metodo-acesso: "API REST Oficial (POST https://br.jooble.org/api/{JOOBLE_API_KEY})"
+      credencial-necessaria: "JOOBLE_API_KEY"
+      observacao-validacao: "Conector implementado. Bloqueado até que a variável JOOBLE_API_KEY seja configurada."
+    - fornecedor: ADZUNA_API
+      identificador: tecnologia-brasil
+      nome-exibicao: "Adzuna Brasil (Agregador)"
+      ativo: false
+      cadencia-minutos: 360
+      categoria: AGREGADOR
+      estado-validacao: BLOQUEADA_CREDENCIAL
+      metodo-acesso: "API REST Oficial (GET https://api.adzuna.com/v1/api/jobs/br/search/1)"
+      credencial-necessaria: "ADZUNA_APP_ID e ADZUNA_APP_KEY"
+      observacao-validacao: "Conector implementado. Bloqueado até que ADZUNA_APP_ID e ADZUNA_APP_KEY sejam configurados."
+    - fornecedor: JSEARCH_API
+      identificador: tecnologia-brasil
+      nome-exibicao: "JSearch / OpenWebNinja (Agregador)"
+      ativo: false
+      cadencia-minutos: 360
+      categoria: AGREGADOR
+      estado-validacao: BLOQUEADA_CREDENCIAL
+      metodo-acesso: "API REST (OpenWebNinja / RapidAPI JSearch)"
+      credencial-necessaria: "JSEARCH_API_KEY"
+      observacao-validacao: "Bloqueado por ausência de JSEARCH_API_KEY."
+    # 5. Fontes experimentais / murais avaliados com limitação ou bloqueio explícito
+    - fornecedor: LEVER_BOARD
+      identificador: exemplo-lever
+      nome-exibicao: "Lever Postings API (Mural de Empresa)"
+      ativo: false
+      cadencia-minutos: 360
+      categoria: MURAL_EMPRESA
+      estado-validacao: EXPERIMENTAL_ATIVAVEL
+      metodo-acesso: "API REST Oficial (GET https://api.lever.co/v0/postings/{empresa}?mode=json)"
+      credencial-necessaria: "Nenhuma (exige slug de empresa ativa no Lever)"
+      observacao-validacao: "Conector implementado. Empresas BR testadas (iFood, PicPay, TOTVS, CI&T) retornaram 404 por migração de ATS."
+    - fornecedor: SOLIDES_PORTAL
+      identificador: vagas.solides.com.br
+      nome-exibicao: "Sólides Portal de Candidatos"
+      ativo: false
+      cadencia-minutos: 360
+      categoria: PORTAL_EXPERIMENTAL
+      estado-validacao: BLOQUEADA_RESTRICAO_ACESSO
+      metodo-acesso: "Portal Web Next.js RSC (https://vagas.solides.com.br/)"
+      credencial-necessaria: "API pública não documentada"
+      observacao-validacao: "Avaliado via HTTP real: HTML inicial não expõe JSON estruturado de vagas (__NEXT_DATA__ ausente) nem API pública oficial."
+    - fornecedor: LINKEDIN
+      identificador: linkedin-jobs
+      nome-exibicao: "LinkedIn Vagas"
+      ativo: false
+      cadencia-minutos: 360
+      categoria: PORTAL_EXPERIMENTAL
+      estado-validacao: BLOQUEADA_RESTRICAO_ACESSO
+      metodo-acesso: "Restrito (Termos de Uso proíbem scraping/automação)"
+      credencial-necessaria: "Parceria comercial LinkedIn Talent Solutions"
+      observacao-validacao: "Bloqueado em conformidade com os Termos do LinkedIn (help/linkedin/answer/a1341387) e diretrizes do PRD."
+    - fornecedor: INDEED_GLASSDOOR
+      identificador: indeed-glassdoor-br
+      nome-exibicao: "Indeed / Glassdoor (e JobSpy)"
+      ativo: false
+      cadencia-minutos: 360
+      categoria: PORTAL_EXPERIMENTAL
+      estado-validacao: BLOQUEADA_RESTRICAO_ACESSO
+      metodo-acesso: "Protegido por desafio anti-bot / Cloudflare Turnstile"
+      credencial-necessaria: "Sem API pública aberta gratuita para busca de vagas"
+      observacao-validacao: "Bloqueado porque o PRD proíbe contornar CAPTCHA, bloqueios ou controles de acesso."

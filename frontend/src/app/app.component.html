@@ -1,0 +1,494 @@
+<div class="layout-container">
+  <header class="top-header">
+    <div class="header-main">
+      <div>
+        <h1 class="app-title">Radar de Vagas — Brasil</h1>
+        <p class="app-subtitle">
+          Etapa 2 • Múltiplas fontes ativas (Comunidades GitHub Issues, Gupy Portal Brasil, Murais Greenhouse e Ashby) + Agrupamento conservador.
+        </p>
+      </div>
+
+      <div class="header-actions">
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="executandoColeta"
+          (click)="dispararColetaManual()"
+          data-testid="btn-coletar-agora">
+          {{ executandoColeta ? 'Coletando fontes...' : 'Coletar agora' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="alternarDiagnostico()"
+          data-testid="btn-diagnostico">
+          {{ exibirDiagnosticoColeta ? 'Ocultar fontes/execuções' : 'Ver fontes, bloqueios e coletas' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Barra de estado de atualização dos dados -->
+    <div
+      class="status-banner"
+      [class.status-stale]="statusColeta?.dadosDesatualizados"
+      [class.status-ok]="statusColeta && !statusColeta.dadosDesatualizados"
+      data-testid="status-coleta-banner">
+      <div class="status-banner-text">
+        @if (statusColeta) {
+          <strong>Estado do catálogo:</strong>
+          <span>{{ statusColeta.motivoEstadoDados }}</span>
+          @if (statusColeta.ultimaColetaSucessoGlobalEm) {
+            <span class="status-timestamp">
+              • Última coleta com sucesso: {{ statusColeta.ultimaColetaSucessoGlobalEm | date:'dd/MM/yyyy HH:mm' }}
+            </span>
+          } @else {
+            <span class="status-timestamp">• Última coleta com sucesso: Não realizada</span>
+          }
+        } @else {
+          <span>Consultando status das fontes...</span>
+        }
+      </div>
+    </div>
+
+    @if (mensagemColeta) {
+      <div class="alert alert-info" data-testid="mensagem-coleta">{{ mensagemColeta }}</div>
+    }
+    @if (erroColeta) {
+      <div class="alert alert-error" data-testid="erro-coleta">{{ erroColeta }}</div>
+    }
+    @if (erroCarregamento) {
+      <div class="alert alert-error" data-testid="erro-carregamento">{{ erroCarregamento }}</div>
+    }
+
+    <!-- Painel de diagnóstico das fontes (ativas, experimentais e bloqueadas) e execuções -->
+    @if (exibirDiagnosticoColeta && statusColeta) {
+      <section class="diagnostics-panel" data-testid="painel-diagnostico">
+        <div class="diagnostics-grid">
+          <div>
+            <h3>Registro de Fontes: Ativas, Experimentais e Bloqueadas ({{ statusColeta.fontes.length }})</h3>
+            <div class="exec-table-wrapper">
+              <table class="exec-table">
+                <thead>
+                  <tr>
+                    <th>Estado</th>
+                    <th>Fonte / Mural</th>
+                    <th>Método e Credencial</th>
+                    <th>Resultado / Limitação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (fonte of statusColeta.fontes; track fonte.id) {
+                    <tr>
+                      <td>
+                        <span
+                          class="badge"
+                          [class.badge-ok]="fonte.estadoValidacao === 'ATIVA_VALIDADA'"
+                          [class.badge-warn]="fonte.estadoValidacao === 'BLOQUEADA_CREDENCIAL' || fonte.estadoValidacao === 'EXPERIMENTAL_ATIVAVEL'"
+                          [class.badge-err]="fonte.estadoValidacao === 'BLOQUEADA_RESTRICAO_ACESSO'">
+                          {{ rotuloEstadoValidacao(fonte.estadoValidacao) }}
+                        </span>
+                      </td>
+                      <td>
+                        <strong>{{ fonte.nomeExibicao }}</strong>
+                        <div class="muted"><code>{{ fonte.fornecedor }} • {{ fonte.identificadorMural }}</code></div>
+                      </td>
+                      <td>
+                        <div>{{ fonte.metodoAcesso || 'HTTP REST' }}</div>
+                        @if (fonte.credencialNecessaria) {
+                          <div class="muted">Credencial: {{ fonte.credencialNecessaria }}</div>
+                        }
+                      </td>
+                      <td>
+                        <div>{{ fonte.observacaoValidacao || '—' }}</div>
+                        @if (fonte.ultimaColetaSucessoEm) {
+                          <div class="muted">Último sucesso: {{ fonte.ultimaColetaSucessoEm | date:'dd/MM/yyyy HH:mm' }}</div>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3>Últimas Execuções Registradas</h3>
+            @if (statusColeta.ultimasExecucoes.length === 0) {
+              <p class="muted">Nenhuma execução de coleta registrada ainda.</p>
+            } @else {
+              <div class="exec-table-wrapper">
+                <table class="exec-table">
+                  <thead>
+                    <tr>
+                      <th>Fonte</th>
+                      <th>Status</th>
+                      <th>Receb. / Válidos</th>
+                      <th>Novos / Atual. / Repet.</th>
+                      <th>Ignor. / Erros</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (exec of statusColeta.ultimasExecucoes.slice(0, 12); track exec.id) {
+                      <tr>
+                        <td>
+                          <strong>{{ rotuloFornecedor(exec.fornecedor) }}</strong>
+                          <div class="muted"><code>{{ exec.identificadorMural }}</code></div>
+                        </td>
+                        <td>
+                          <span
+                            class="badge"
+                            [class.badge-ok]="exec.statusCodigo === 'SUCESSO'"
+                            [class.badge-warn]="exec.statusCodigo === 'SUCESSO_PARCIAL' || exec.statusCodigo === 'LIMITE_ATINGIDO' || exec.statusCodigo === 'BLOQUEADA_CREDENCIAL'"
+                            [class.badge-err]="exec.statusCodigo === 'FALHA' || exec.statusCodigo === 'BLOQUEADA_ACESSO'">
+                            {{ exec.statusRotulo }}
+                          </span>
+                          @if (exec.erroResumido) {
+                            <div class="exec-error-note">{{ exec.erroResumido }}</div>
+                          }
+                        </td>
+                        <td>{{ exec.anunciosRecebidos }} / {{ exec.anunciosValidos }}</td>
+                        <td>{{ exec.anunciosNovos }} / {{ exec.anunciosAtualizados }} / {{ exec.anunciosRepetidos }}</td>
+                        <td>{{ exec.anunciosIgnorados }} / {{ exec.errosContagem }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </div>
+      </section>
+    }
+  </header>
+
+  <!-- Barra de busca, fonte e recorte de publicação -->
+  <section class="filters-bar" aria-label="Filtros de consulta">
+    <form class="filters-form" (ngSubmit)="aplicarFiltros()">
+      <div class="filter-group filter-search">
+        <label for="input-busca">Buscar por cargo, empresa, tecnologia ou cidade</label>
+        <input
+          id="input-busca"
+          type="text"
+          name="termoBusca"
+          [(ngModel)]="termoBusca"
+          placeholder="Ex.: Java, Angular, Python, DevOps, São Paulo..."
+          data-testid="input-busca" />
+      </div>
+
+      <div class="filter-group">
+        <label for="select-fonte">Fonte de origem</label>
+        <select
+          id="select-fonte"
+          name="filtroFonte"
+          [(ngModel)]="filtroFonte"
+          (change)="aplicarFiltros()"
+          data-testid="select-fonte">
+          <option value="TODAS">Todas as fontes</option>
+          <option value="GITHUB_ISSUES">GitHub Issues (5 Comunidades BR)</option>
+          <option value="GUPY_PORTAL">Gupy Portal Brasil</option>
+          <option value="GREENHOUSE_BOARD">Greenhouse (Murais de Empresas)</option>
+          <option value="ASHBY_BOARD">Ashby (Murais de Empresas)</option>
+          <option value="JOOBLE_API">Jooble Brasil</option>
+          <option value="ADZUNA_API">Adzuna Brasil</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="select-publicacao">Data de publicação</label>
+        <select
+          id="select-publicacao"
+          name="filtroPublicacao"
+          [(ngModel)]="filtroPublicacao"
+          (change)="aplicarFiltros()"
+          data-testid="select-publicacao">
+          <option value="TODAS">Todas (conhecidas primeiro, depois por descoberta)</option>
+          <option value="CONHECIDA">Apenas com publicação conhecida</option>
+          <option value="DESCONHECIDA">Sem publicação conhecida (por descoberta)</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="select-tamanho">Por página</label>
+        <select
+          id="select-tamanho"
+          name="tamanhoPagina"
+          [(ngModel)]="tamanhoPagina"
+          (change)="alterarTamanhoPagina()"
+          data-testid="select-tamanho">
+          <option [ngValue]="10">10 itens</option>
+          <option [ngValue]="15">15 itens</option>
+          <option [ngValue]="25">25 itens</option>
+        </select>
+      </div>
+
+      <div class="filter-checkboxes">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            name="incluirIndisponiveis"
+            [(ngModel)]="incluirIndisponiveis"
+            (change)="aplicarFiltros()"
+            data-testid="check-indisponiveis" />
+          Mostrar indisponíveis na origem
+        </label>
+
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            name="bancoTalentos"
+            [(ngModel)]="bancoTalentos"
+            (change)="aplicarFiltros()"
+            data-testid="check-banco-talentos" />
+          Consultar bancos de talentos
+        </label>
+      </div>
+
+      <div class="filter-buttons">
+        <button type="submit" class="btn btn-primary" data-testid="btn-buscar">Filtrar</button>
+        <button type="button" class="btn btn-secondary" (click)="limparFiltros()" data-testid="btn-limpar">
+          Limpar
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Conteúdo principal: Lista paginada + Painel de Detalhes -->
+  <main class="workspace-grid">
+    <section class="jobs-list-column" aria-label="Lista de vagas">
+      @if (carregandoLista) {
+        <div class="empty-state" data-testid="estado-carregando">
+          <p>Carregando catálogo local de vagas...</p>
+        </div>
+      } @else if (!paginaVagas || paginaVagas.itens.length === 0) {
+        <div class="empty-state" data-testid="estado-vazio">
+          <h2>Nenhuma vaga encontrada no catálogo local</h2>
+          <p>
+            O sistema não exibe vagas fictícias ou de demonstração. Caso ainda não tenha executado uma coleta,
+            clique em <strong>Coletar agora</strong> no topo para importar anúncios reais das fontes ativas.
+          </p>
+        </div>
+      } @else {
+        <div class="list-summary" data-testid="resumo-paginacao">
+          <span>
+            Exibindo <strong>{{ paginaVagas.itens.length }}</strong> de
+            <strong>{{ paginaVagas.totalElementos }}</strong> oportunidade(s)
+            • Página {{ paginaVagas.pagina + 1 }} de {{ paginaVagas.totalPaginas }}
+          </span>
+        </div>
+
+        <ul class="jobs-list" data-testid="lista-vagas">
+          @for (vaga of paginaVagas.itens; track vaga.id) {
+            <li
+              class="job-card"
+              [class.job-card-selected]="vagaSelecionada?.id === vaga.id"
+              [class.job-card-unavailable]="vaga.disponibilidadeCodigo !== 'DISPONIVEL'"
+              (click)="selecionarVaga(vaga)"
+              data-testid="item-vaga">
+              <div class="job-card-header">
+                <h2 class="job-title">{{ vaga.cargo }}</h2>
+                <div class="job-badges">
+                  <span class="badge badge-neutral">{{ rotuloFornecedor(vaga.fontePrincipal) }}</span>
+                  @if ((vaga.quantidadeAnunciosOrigem ?? 1) > 1) {
+                    <span class="badge badge-ok" data-testid="selo-multi-fonte">
+                      {{ vaga.quantidadeAnunciosOrigem }} anúncios vinculados
+                    </span>
+                  }
+                  @if (ehRecente24h(vaga)) {
+                    <span class="badge badge-ok" data-testid="selo-recente">Publicada nas últimas 24h</span>
+                  }
+                  @if (!vaga.publicacaoConhecida) {
+                    <span class="badge badge-neutral" data-testid="selo-publicacao-desconhecida">
+                      Publicação não informada • Encontrada em {{ vaga.primeiraObservacaoEm | date:'dd/MM/yyyy' }}
+                    </span>
+                  }
+                  @if (vaga.disponibilidadeCodigo !== 'DISPONIVEL') {
+                    <span class="badge badge-warn" data-testid="selo-indisponivel">
+                      {{ vaga.disponibilidadeRotulo }}
+                    </span>
+                  }
+                  @if (vaga.tipoOportunidadeCodigo === 'BANCO_DE_TALENTOS') {
+                    <span class="badge badge-warn">Banco de talentos</span>
+                  }
+                </div>
+              </div>
+
+              <div class="job-meta-grid">
+                <div><strong>Empresa:</strong> {{ formatarEmpresa(vaga.empresa) }}</div>
+                <div><strong>Localização:</strong> {{ formatarLocalizacao(vaga.localizacao) }}</div>
+                <div><strong>Modalidade:</strong> {{ vaga.modalidadeRotulo }}</div>
+                <div><strong>Nível:</strong> {{ vaga.senioridadeRotulo }}</div>
+              </div>
+
+              <div class="job-card-footer">
+                <div class="job-dates-origin">
+                  @if (vaga.publicacaoConhecida && vaga.publicadoEm) {
+                    <span data-testid="data-publicacao">
+                      Publicada em {{ vaga.publicadoEm | date:'dd/MM/yyyy HH:mm' }}
+                    </span>
+                  } @else {
+                    <span data-testid="data-descoberta">
+                      Publicação: Não informada (observada em {{ vaga.primeiraObservacaoEm | date:'dd/MM/yyyy HH:mm' }})
+                    </span>
+                  }
+                  <span class="origin-tag">
+                    • Origem: {{ rotuloFornecedor(vaga.fontePrincipal) }} ({{ vaga.muralPrincipal }} #{{ vaga.identificadorExternoPrincipal }})
+                  </span>
+                </div>
+
+                <a
+                  class="btn btn-small btn-primary"
+                  [href]="vaga.linkCandidatura"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  (click)="$event.stopPropagation()"
+                  data-testid="link-candidatura-card">
+                  Candidatar-se
+                </a>
+              </div>
+            </li>
+          }
+        </ul>
+
+        <!-- Controles de paginação no servidor -->
+        <nav class="pagination-bar" aria-label="Paginação de vagas" data-testid="barra-paginacao">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            [disabled]="!paginaVagas.temAnterior"
+            (click)="irParaPagina(paginaVagas.pagina - 1)"
+            data-testid="btn-pagina-anterior">
+            ← Anterior
+          </button>
+
+          <span class="pagination-info">
+            Página <strong>{{ paginaVagas.pagina + 1 }}</strong> de <strong>{{ paginaVagas.totalPaginas }}</strong>
+          </span>
+
+          <button
+            type="button"
+            class="btn btn-secondary"
+            [disabled]="!paginaVagas.temProxima"
+            (click)="irParaPagina(paginaVagas.pagina + 1)"
+            data-testid="btn-proxima-pagina">
+            Próxima →
+          </button>
+        </nav>
+      }
+    </section>
+
+    <!-- Painel de detalhes da vaga -->
+    <aside class="job-detail-column" aria-label="Detalhes da vaga" data-testid="painel-detalhes">
+      @if (carregandoDetalhe) {
+        <div class="detail-placeholder">Carregando detalhes da oportunidade...</div>
+      } @else if (!vagaSelecionada) {
+        <div class="detail-placeholder">
+          Selecione uma vaga na lista para ler a descrição completa, verificar a rastreabilidade da origem e acessar a candidatura.
+        </div>
+      } @else {
+        <article class="detail-card">
+          <header class="detail-header">
+            <h2>{{ vagaSelecionada.cargo }}</h2>
+            <p class="detail-company">
+              <strong>Empresa:</strong> {{ formatarEmpresa(vagaSelecionada.empresa) }}
+            </p>
+
+            @if (vagaSelecionada.disponibilidadeCodigo !== 'DISPONIVEL') {
+              <div class="alert alert-warn" data-testid="alerta-indisponibilidade-detalhe">
+                <strong>{{ vagaSelecionada.disponibilidadeRotulo }}:</strong>
+                {{ vagaSelecionada.motivoDisponibilidade || 'Anúncio marcado como indisponível na plataforma de origem.' }}
+              </div>
+            }
+
+            <div class="detail-actions">
+              <a
+                class="btn btn-primary"
+                [href]="vagaSelecionada.linkCandidatura"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="btn-candidatura-detalhe">
+                Ir para candidatura ↗
+              </a>
+              <a
+                class="btn btn-secondary"
+                [href]="vagaSelecionada.linkOrigemPrincipal"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="btn-origem-detalhe">
+                Abrir anúncio na origem ({{ rotuloFornecedor(vagaSelecionada.fontePrincipal) }} • {{ vagaSelecionada.muralPrincipal }}) ↗
+              </a>
+            </div>
+          </header>
+
+          <section class="detail-metadata">
+            <h3>Classificação e Condições</h3>
+            <div class="meta-pairs">
+              <div><strong>Área:</strong> {{ vagaSelecionada.areaRotulo }}</div>
+              <div><strong>Senioridade:</strong> {{ vagaSelecionada.senioridadeRotulo }}</div>
+              <div><strong>Modalidade:</strong> {{ vagaSelecionada.modalidadeRotulo }}</div>
+              <div><strong>Contratação:</strong> {{ vagaSelecionada.regimeRotulo }}</div>
+              <div><strong>Localização:</strong> {{ formatarLocalizacao(vagaSelecionada.localizacao) }}</div>
+              <div><strong>Tipo:</strong> {{ vagaSelecionada.tipoOportunidadeRotulo }}</div>
+            </div>
+
+            @if (vagaSelecionada.tecnologias.length > 0) {
+              <div class="tech-tags">
+                <strong>Tecnologias identificadas:</strong>
+                @for (tech of vagaSelecionada.tecnologias; track tech) {
+                  <span class="badge badge-neutral">{{ tech }}</span>
+                }
+              </div>
+            }
+          </section>
+
+          <section class="detail-dates">
+            <h3>Datas e Rastreabilidade</h3>
+            <div class="meta-pairs">
+              <div>
+                <strong>Publicação informada pela fonte:</strong>
+                @if (vagaSelecionada.publicacaoConhecida && vagaSelecionada.publicadoEm) {
+                  <span>{{ vagaSelecionada.publicadoEm | date:'dd/MM/yyyy HH:mm' }}</span>
+                } @else {
+                  <span>Não informada</span>
+                }
+              </div>
+              <div>
+                <strong>Primeira observação no Radar:</strong>
+                {{ vagaSelecionada.primeiraObservacaoEm | date:'dd/MM/yyyy HH:mm' }}
+              </div>
+              <div>
+                <strong>Última observação bem-sucedida:</strong>
+                {{ vagaSelecionada.ultimaObservacaoEm | date:'dd/MM/yyyy HH:mm' }}
+              </div>
+              <div>
+                <strong>Última atualização na fonte:</strong>
+                @if (vagaSelecionada.atualizadoNaFonteEm) {
+                  <span>{{ vagaSelecionada.atualizadoNaFonteEm | date:'dd/MM/yyyy HH:mm' }}</span>
+                } @else {
+                  <span>Não informada</span>
+                }
+              </div>
+            </div>
+          </section>
+
+          <section class="detail-description">
+            <h3>Descrição da Oportunidade</h3>
+            <pre class="description-pre" data-testid="descricao-vaga">{{ vagaSelecionada.descricao }}</pre>
+          </section>
+
+          <section class="detail-origins">
+            <h3>Anúncios de Origem Vinculados ({{ vagaSelecionada.anunciosOrigem.length }})</h3>
+            <ul class="origins-list">
+              @for (anuncio of vagaSelecionada.anunciosOrigem; track anuncio.id) {
+                <li>
+                  <strong>{{ rotuloFornecedor(anuncio.fornecedor) }}</strong> • <code>{{ anuncio.identificadorMural }} #{{ anuncio.identificadorExterno }}</code>
+                  — {{ anuncio.disponibilidadeRotulo }}
+                  — <a [href]="anuncio.urlOrigem" target="_blank" rel="noopener noreferrer">Ver original</a>
+                </li>
+              }
+            </ul>
+          </section>
+        </article>
+      }
+    </aside>
+  </main>
+</div>

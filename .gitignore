@@ -1,0 +1,26 @@
+# Variáveis de ambiente e segredos locais
+.env
+.env.*
+!.env.example
+
+# Dados locais de banco (quando executado sem Docker)
+.local-pgdata/
+.local-pg.log
+
+# Backend (Maven / Java)
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.log
+
+# Frontend (Angular / Node)
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/coverage/
+
+# IDEs e Sistema Operacional
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

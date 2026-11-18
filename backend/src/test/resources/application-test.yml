@@ -1,0 +1,58 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:radar_vagas_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+radar:
+  coleta:
+    agendamento-ativo: false
+    desatualizado-apos-horas: 12
+  github:
+    api-base-url: http://127.0.0.1:0
+    token: ""
+    itens-por-pagina: 10
+    max-paginas-por-execucao: 2
+    sobreposicao-incremental-minutos: 30
+    max-tentativas: 2
+    espera-inicial-ms: 10
+    timeout-segundos: 5
+    repositorios:
+      - identificador: backend-br/vagas
+        nome-exibicao: Backend Brasil
+        ativo: true
+        cadencia-minutos: 360
+      - identificador: frontendbr/vagas
+        nome-exibicao: Frontend Brasil
+        ativo: true
+        cadencia-minutos: 360
+  greenhouse:
+    api-base-url: http://127.0.0.1:0
+    max-itens-por-mural: 10
+  gupy:
+    portal-base-url: http://127.0.0.1:0
+    max-itens-por-busca: 10
+  ashby:
+    api-base-url: http://127.0.0.1:0
+    max-itens-por-mural: 10
+  lever:
+    api-base-url: http://127.0.0.1:0
+    max-itens-por-mural: 10
+  jooble:
+    api-base-url: http://127.0.0.1:0
+    api-key: ""
+  adzuna:
+    api-base-url: http://127.0.0.1:0
+    app-id: ""
+    app-key: ""
+  fontes-registradas: []

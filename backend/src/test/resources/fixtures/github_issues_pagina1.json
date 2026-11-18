@@ -1,0 +1,74 @@
+[
+  {
+    "number": 1001,
+    "title": "[Remoto] Pessoa Desenvolvedora Java Sênior @ Acme Tech",
+    "body": "## Descrição\nBuscamos dev Java com Spring Boot e PostgreSQL (não confundir com JavaScript).\n<script>alert('xss')</script>\n\n## Contratação\nCLT\n\n## Como se candidatar\nAcesse https://carreiras.acmetech.com.br/vagas/dev-java?jobId=777&utm_source=github&fbclid=12345",
+    "state": "open",
+    "html_url": "https://github.com/backend-br/vagas/issues/1001",
+    "created_at": "2026-11-15T10:00:00Z",
+    "updated_at": "2026-11-15T10:00:00Z",
+    "labels": [
+      { "name": "Remoto" },
+      { "name": "Sênior" },
+      { "name": "CLT" }
+    ]
+  },
+  {
+    "number": 1002,
+    "title": "[São Paulo/SP - Híbrido] Engenheiro de Dados Pleno @ Beta Analytics",
+    "body": "Vaga para atuação híbrida em São Paulo com Python e SQL.\nCandidatura: http://127.0.0.1:8080/internal-admin ou https://betaanalytics.com.br/jobs/dados-pleno?req=42",
+    "state": "open",
+    "html_url": "https://github.com/backend-br/vagas/issues/1002",
+    "created_at": null,
+    "updated_at": "2026-11-16T14:00:00Z",
+    "labels": [
+      { "name": "Híbrido" },
+      { "name": "Pleno" }
+    ]
+  },
+  {
+    "number": 1003,
+    "title": " Pull Request de ajuste no README",
+    "body": "Ajustando texto.",
+    "state": "open",
+    "html_url": "https://github.com/backend-br/vagas/pull/1003",
+    "created_at": "2026-11-16T15:00:00Z",
+    "updated_at": "2026-11-16T15:00:00Z",
+    "pull_request": {
+      "url": "https://api.github.com/repos/backend-br/vagas/pulls/1003"
+    },
+    "labels": []
+  },
+  {
+    "number": 1004,
+    "title": "Regras do repositório - Leia antes de postar uma vaga",
+    "body": "Instruções gerais sobre como publicar vagas.",
+    "state": "open",
+    "html_url": "https://github.com/backend-br/vagas/issues/1004",
+    "created_at": "2026-11-01T00:00:00Z",
+    "updated_at": "2026-11-01T00:00:00Z",
+    "labels": []
+  },
+  {
+    "number": 1005,
+    "title": "[Currículo] Procuro vaga como Desenvolvedor Júnior",
+    "body": "Estou disponível para contratação imediata.",
+    "state": "open",
+    "html_url": "https://github.com/backend-br/vagas/issues/1005",
+    "created_at": "2026-11-16T12:00:00Z",
+    "updated_at": "2026-11-16T12:00:00Z",
+    "labels": []
+  },
+  {
+    "number": 1006,
+    "title": "[Remoto] Banco de Talentos - Pessoa Desenvolvedora Back-end @ Gamma Corp",
+    "body": "Cadastro de reserva / banco de talentos para futuras posições.",
+    "state": "open",
+    "html_url": "https://github.com/backend-br/vagas/issues/1006",
+    "created_at": "2026-11-16T16:00:00Z",
+    "updated_at": "2026-11-16T16:00:00Z",
+    "labels": [
+      { "name": "Remoto" }
+    ]
+  }
+]
