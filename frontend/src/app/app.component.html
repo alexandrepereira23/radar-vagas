@@ -4,7 +4,7 @@
       <div>
         <h1 class="app-title">Radar de Vagas — Brasil</h1>
         <p class="app-subtitle">
-          Etapa 2 • Múltiplas fontes ativas (Comunidades GitHub Issues, Gupy Portal Brasil, Murais Greenhouse e Ashby) + Agrupamento conservador.
+          Encontre vagas recentes e acompanhe suas candidaturas. Horários de Brasília.
         </p>
       </div>
 
@@ -39,25 +39,25 @@
           <span>{{ statusColeta.motivoEstadoDados }}</span>
           @if (statusColeta.ultimaColetaSucessoGlobalEm) {
             <span class="status-timestamp">
-              • Última coleta com sucesso: {{ statusColeta.ultimaColetaSucessoGlobalEm | date:'dd/MM/yyyy HH:mm' }}
+              • Última coleta com sucesso: {{ statusColeta.ultimaColetaSucessoGlobalEm | saoPauloData }}
             </span>
           } @else {
             <span class="status-timestamp">• Última coleta com sucesso: Não realizada</span>
           }
-        } @else {
+        } @else if (!erroStatus) {
           <span>Consultando status das fontes...</span>
         }
       </div>
     </div>
 
     @if (mensagemColeta) {
-      <div class="alert alert-info" data-testid="mensagem-coleta">{{ mensagemColeta }}</div>
+      <div class="alert alert-info" role="status" data-testid="mensagem-coleta">{{ mensagemColeta }}</div>
     }
     @if (erroColeta) {
-      <div class="alert alert-error" data-testid="erro-coleta">{{ erroColeta }}</div>
+      <div class="alert alert-error" role="alert" data-testid="erro-coleta">{{ erroColeta }}</div>
     }
-    @if (erroCarregamento) {
-      <div class="alert alert-error" data-testid="erro-carregamento">{{ erroCarregamento }}</div>
+    @if (erroStatus) {
+      <div class="alert alert-error" role="alert">{{ erroStatus }}</div>
     }
 
     <!-- Painel de diagnóstico das fontes (ativas, experimentais e bloqueadas) e execuções -->
@@ -111,7 +111,7 @@
                       <td>
                         <div>{{ fonte.observacaoValidacao || '—' }}</div>
                         @if (fonte.ultimaColetaSucessoEm) {
-                          <div class="muted">Último sucesso: {{ fonte.ultimaColetaSucessoEm | date:'dd/MM/yyyy HH:mm' }}</div>
+                          <div class="muted">Último sucesso: {{ fonte.ultimaColetaSucessoEm | saoPauloData }}</div>
                         }
                         @if (fonte.ativo) {
                           <div style="margin-top: 6px;">
@@ -182,7 +182,7 @@
     }
   </header>
 
-  <!-- Barra de busca, fonte e recorte de publicação -->
+  <!-- Todos os filtros do formulário são aplicados juntos ao enviar. -->
   <section class="filters-bar" aria-label="Filtros de consulta">
     <form class="filters-form" (ngSubmit)="aplicarFiltros()">
       <div class="filter-group filter-search">
@@ -191,7 +191,7 @@
           id="input-busca"
           type="text"
           name="termoBusca"
-          [(ngModel)]="termoBusca"
+          [(ngModel)]="filtros.q"
           placeholder="Ex.: Java, Angular, Python, DevOps, São Paulo..."
           data-testid="input-busca" />
       </div>
@@ -201,17 +201,58 @@
         <select
           id="select-fonte"
           name="filtroFonte"
-          [(ngModel)]="filtroFonte"
-          (change)="aplicarFiltros()"
+          [(ngModel)]="filtros.fonte"
           data-testid="select-fonte">
-          <option value="TODAS">Todas as fontes</option>
-          <option value="GITHUB_ISSUES">GitHub Issues (5 Comunidades BR)</option>
-          <option value="GUPY_PORTAL">Gupy Portal Brasil</option>
-          <option value="GREENHOUSE_BOARD">Greenhouse (Murais de Empresas)</option>
-          <option value="ASHBY_BOARD">Ashby (Murais de Empresas)</option>
-          <option value="JOOBLE_API">Jooble Brasil</option>
-          <option value="ADZUNA_API">Adzuna Brasil</option>
+          <option value="">Todas as fontes</option>
+          @for (fonte of fontesFiltro; track fonte) {
+            <option [value]="fonte">{{ rotuloFornecedor(fonte) }}</option>
+          }
         </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="select-area">Área</label>
+        <select id="select-area" name="area" [(ngModel)]="filtros.area" [disabled]="!opcoesVagas">
+          <option value="">Todas as áreas</option>
+          @for (area of opcoesVagas?.areas; track area.codigo) {
+            <option [value]="area.codigo">{{ area.rotulo }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="select-senioridade">Senioridade</label>
+        <select id="select-senioridade" name="senioridade" [(ngModel)]="filtros.senioridade" [disabled]="!opcoesVagas">
+          <option value="">Todos os níveis</option>
+          @for (nivel of opcoesVagas?.senioridades; track nivel.codigo) {
+            <option [value]="nivel.codigo">{{ nivel.rotulo }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="select-modalidade">Modalidade</label>
+        <select id="select-modalidade" name="modalidade" [(ngModel)]="filtros.modalidade" [disabled]="!opcoesVagas">
+          <option value="">Todas as modalidades</option>
+          @for (modalidade of opcoesVagas?.modalidades; track modalidade.codigo) {
+            <option [value]="modalidade.codigo">{{ modalidade.rotulo }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="select-tecnologia">Tecnologia</label>
+        <select id="select-tecnologia" name="tecnologia" [(ngModel)]="filtros.tecnologia" [disabled]="!opcoesVagas">
+          <option value="">Todas as tecnologias</option>
+          @for (tecnologia of tecnologiasFiltro; track tecnologia) {
+            <option [value]="tecnologia">{{ tecnologia }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="input-localizacao">Localização</label>
+        <input id="input-localizacao" type="text" name="localizacao" [(ngModel)]="filtros.localizacao" placeholder="Ex.: Recife" />
       </div>
 
       <div class="filter-group">
@@ -219,12 +260,29 @@
         <select
           id="select-publicacao"
           name="filtroPublicacao"
-          [(ngModel)]="filtroPublicacao"
-          (change)="aplicarFiltros()"
+          [(ngModel)]="filtros.publicacao"
           data-testid="select-publicacao">
-          <option value="TODAS">Todas (conhecidas primeiro, depois por descoberta)</option>
-          <option value="CONHECIDA">Apenas com publicação conhecida</option>
-          <option value="DESCONHECIDA">Sem publicação conhecida (por descoberta)</option>
+          @for (publicacao of publicacoes; track publicacao[0]) {
+            <option [value]="publicacao[0]">{{ publicacao[1] }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="select-candidatura">Candidatura</label>
+        <select id="select-candidatura" name="candidatura" [(ngModel)]="filtros.candidatura">
+          <option value="TODAS">Todas as situações</option>
+          <option value="NAO_CANDIDATADAS">Ainda não me candidatei</option>
+          <option value="CANDIDATADAS">Já me candidatei</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="select-ocultacao">Visibilidade</label>
+        <select id="select-ocultacao" name="ocultacao" [(ngModel)]="filtros.ocultacao">
+          <option value="EXCLUIR">Excluir ocultas</option>
+          <option value="INCLUIR">Incluir ocultas</option>
+          <option value="SOMENTE">Somente ocultas</option>
         </select>
       </div>
 
@@ -247,8 +305,7 @@
           <input
             type="checkbox"
             name="incluirIndisponiveis"
-            [(ngModel)]="incluirIndisponiveis"
-            (change)="aplicarFiltros()"
+            [(ngModel)]="filtros.incluirIndisponiveis"
             data-testid="check-indisponiveis" />
           Mostrar indisponíveis na origem
         </label>
@@ -257,8 +314,7 @@
           <input
             type="checkbox"
             name="bancoTalentos"
-            [(ngModel)]="bancoTalentos"
-            (change)="aplicarFiltros()"
+            [(ngModel)]="filtros.bancoTalentos"
             data-testid="check-banco-talentos" />
           Consultar bancos de talentos
         </label>
@@ -267,26 +323,42 @@
       <div class="filter-buttons">
         <button type="submit" class="btn btn-primary" data-testid="btn-buscar">Filtrar</button>
         <button type="button" class="btn btn-secondary" (click)="limparFiltros()" data-testid="btn-limpar">
-          Limpar
+          Limpar filtros
         </button>
       </div>
     </form>
+    <p class="filter-context" data-testid="periodo-aplicado">Período aplicado: <strong>{{ periodoAplicado }}</strong></p>
+    @if (erroOpcoes) {
+      <div class="alert alert-error" role="alert">{{ erroOpcoes }}
+        <button type="button" class="btn btn-small btn-secondary" (click)="carregarOpcoesVagas()">Tentar novamente</button>
+      </div>
+    }
   </section>
 
   <!-- Conteúdo principal: Lista paginada + Painel de Detalhes -->
   <main class="workspace-grid">
     <section class="jobs-list-column" aria-label="Lista de vagas">
       @if (carregandoLista) {
-        <div class="empty-state" data-testid="estado-carregando">
+        <div class="empty-state" role="status" data-testid="estado-carregando">
           <p>Carregando catálogo local de vagas...</p>
+        </div>
+      } @else if (erroCarregamento) {
+        <div class="alert alert-error" role="alert" data-testid="erro-carregamento">{{ erroCarregamento }}
+          <button type="button" class="btn btn-small btn-secondary" (click)="carregarVagas(paginaAtual)">Tentar novamente</button>
         </div>
       } @else if (!paginaVagas || paginaVagas.itens.length === 0) {
         <div class="empty-state" data-testid="estado-vazio">
-          <h2>Nenhuma vaga encontrada no catálogo local</h2>
-          <p>
-            O sistema não exibe vagas fictícias ou de demonstração. Caso ainda não tenha executado uma coleta,
-            clique em <strong>Coletar agora</strong> no topo para importar anúncios reais das fontes ativas.
-          </p>
+          @if (opcoesVagas?.catalogoVazio === true) {
+            <h2>Nenhuma vaga encontrada no catálogo local</h2>
+            <p>O catálogo ainda não tem vagas. Use <strong>Coletar agora</strong> para importar anúncios das fontes ativas.</p>
+          } @else if (opcoesVagas?.catalogoVazio === false) {
+            <h2>Nenhuma vaga corresponde aos filtros aplicados</h2>
+            <p>Experimente outro período, como Qualquer data, ou limpe os filtros para voltar à consulta inicial.</p>
+            <button type="button" class="btn btn-secondary" (click)="limparFiltros()">Limpar filtros</button>
+          } @else {
+            <h2>A consulta não retornou vagas</h2>
+            <button type="button" class="btn btn-secondary" (click)="limparFiltros()">Limpar filtros</button>
+          }
         </div>
       } @else {
         <div class="list-summary" data-testid="resumo-paginacao">
@@ -301,14 +373,25 @@
           @for (vaga of paginaVagas.itens; track vaga.id) {
             <li
               class="job-card"
-              [class.job-card-selected]="vagaSelecionada?.id === vaga.id"
+              [class.job-card-selected]="idSelecionado === vaga.id"
               [class.job-card-unavailable]="vaga.disponibilidadeCodigo !== 'DISPONIVEL'"
               (click)="selecionarVaga(vaga)"
               data-testid="item-vaga">
               <div class="job-card-header">
-                <h2 class="job-title">{{ vaga.cargo }}</h2>
+                <h2 class="job-title">
+                  <button type="button" class="job-title-button" (click)="$event.stopPropagation(); selecionarVaga(vaga)"
+                    [attr.aria-current]="idSelecionado === vaga.id ? 'true' : null" data-testid="btn-ver-detalhe">
+                    {{ vaga.cargo }}
+                  </button>
+                </h2>
                 <div class="job-badges">
                   <span class="badge badge-neutral">{{ rotuloFornecedor(vaga.fontePrincipal) }}</span>
+                  @if (vaga.jaMeCandidatei) {
+                    <span class="badge badge-ok" data-testid="selo-candidatura">Já me candidatei</span>
+                  }
+                  @if (vaga.oculta) {
+                    <span class="badge badge-neutral">Oculta</span>
+                  }
                   @if ((vaga.quantidadeAnunciosOrigem ?? 1) > 1) {
                     <span class="badge badge-ok" data-testid="selo-multi-fonte">
                       {{ vaga.quantidadeAnunciosOrigem }} anúncios vinculados
@@ -319,7 +402,7 @@
                   }
                   @if (!vaga.publicacaoConhecida) {
                     <span class="badge badge-neutral" data-testid="selo-publicacao-desconhecida">
-                      Publicação não informada • Encontrada em {{ vaga.primeiraObservacaoEm | date:'dd/MM/yyyy' }}
+                      Publicação não informada
                     </span>
                   }
                   @if (vaga.disponibilidadeCodigo !== 'DISPONIVEL') {
@@ -333,6 +416,10 @@
                 </div>
               </div>
 
+              @if (vaga.tecnologias.length > 0) {
+                <p class="job-technologies"><strong>Tecnologias:</strong> {{ vaga.tecnologias.join(', ') }}</p>
+              }
+
               <div class="job-meta-grid">
                 <div><strong>Empresa:</strong> {{ formatarEmpresa(vaga.empresa) }}</div>
                 <div><strong>Localização:</strong> {{ formatarLocalizacao(vaga.localizacao) }}</div>
@@ -344,11 +431,11 @@
                 <div class="job-dates-origin">
                   @if (vaga.publicacaoConhecida && vaga.publicadoEm) {
                     <span data-testid="data-publicacao">
-                      Publicada em {{ vaga.publicadoEm | date:'dd/MM/yyyy HH:mm' }}
+                      Publicada em {{ vaga.publicadoEm | saoPauloData }}
                     </span>
                   } @else {
                     <span data-testid="data-descoberta">
-                      Publicação: Não informada (observada em {{ vaga.primeiraObservacaoEm | date:'dd/MM/yyyy HH:mm' }})
+                      Encontrada em {{ vaga.primeiraObservacaoEm | saoPauloData }}
                     </span>
                   }
                   <span class="origin-tag">
@@ -363,7 +450,7 @@
                   rel="noopener noreferrer"
                   (click)="$event.stopPropagation()"
                   data-testid="link-candidatura-card">
-                  Candidatar-se
+                  Abrir candidatura ↗
                 </a>
               </div>
             </li>
@@ -399,8 +486,19 @@
 
     <!-- Painel de detalhes da vaga -->
     <aside class="job-detail-column" aria-label="Detalhes da vaga" data-testid="painel-detalhes">
+      @if (acoesPendentes.size > 0) {
+        <p class="alert alert-info" role="status" data-testid="salvando-acao">Salvando ação pessoal…</p>
+      }
+      @if (mensagemAcao) {
+        <p class="alert alert-info" role="status">{{ mensagemAcao }}</p>
+      }
+      @if (erroAcao) {
+        <p class="alert alert-error" role="alert" data-testid="erro-acao">{{ erroAcao }}</p>
+      }
       @if (carregandoDetalhe) {
-        <div class="detail-placeholder">Carregando detalhes da oportunidade...</div>
+        <div class="detail-placeholder" role="status">Carregando detalhes da oportunidade...</div>
+      } @else if (erroDetalhe) {
+        <div class="alert alert-error" role="alert" data-testid="erro-detalhe">{{ erroDetalhe }}</div>
       } @else if (!vagaSelecionada) {
         <div class="detail-placeholder">
           Selecione uma vaga na lista para ler a descrição completa, verificar a rastreabilidade da origem e acessar a candidatura.
@@ -427,7 +525,7 @@
                 target="_blank"
                 rel="noopener noreferrer"
                 data-testid="btn-candidatura-detalhe">
-                Ir para candidatura ↗
+                 Abrir candidatura ↗
               </a>
               <a
                 class="btn btn-secondary"
@@ -438,6 +536,30 @@
                 Abrir anúncio na origem ({{ rotuloFornecedor(vagaSelecionada.fontePrincipal) }} • {{ vagaSelecionada.muralPrincipal }}) ↗
               </a>
             </div>
+            <div class="detail-actions" aria-label="Ações pessoais">
+              <button type="button" class="btn btn-secondary" [disabled]="acoesPendentes.has(vagaSelecionada.id)"
+                (click)="alterarAcao(vagaSelecionada, 'jaMeCandidatei')" data-testid="btn-marcar-candidatura">
+                {{ vagaSelecionada.jaMeCandidatei ? 'Desfazer marcação' : 'Já me candidatei' }}
+              </button>
+              <button type="button" class="btn btn-secondary" [disabled]="acoesPendentes.has(vagaSelecionada.id)"
+                (click)="alterarAcao(vagaSelecionada, 'oculta')" data-testid="btn-ocultar-vaga">
+                {{ vagaSelecionada.oculta ? 'Restaurar' : 'Ocultar' }}
+              </button>
+            </div>
+            @if (vagaSelecionada.jaMeCandidatei) {
+              <span class="badge badge-ok" data-testid="candidatura-detalhe">Já me candidatei
+                @if (datasAcaoSelecionada?.candidatadoEm; as data) {
+                  • {{ data | saoPauloData }}
+                }
+              </span>
+            }
+            @if (vagaSelecionada.oculta) {
+              <span class="badge badge-neutral">Oculta
+                @if (datasAcaoSelecionada?.ocultadoEm; as data) {
+                  • {{ data | saoPauloData }}
+                }
+              </span>
+            }
           </header>
 
           <section class="detail-metadata">
@@ -467,23 +589,23 @@
               <div>
                 <strong>Publicação informada pela fonte:</strong>
                 @if (vagaSelecionada.publicacaoConhecida && vagaSelecionada.publicadoEm) {
-                  <span>{{ vagaSelecionada.publicadoEm | date:'dd/MM/yyyy HH:mm' }}</span>
+                  <span>{{ vagaSelecionada.publicadoEm | saoPauloData }}</span>
                 } @else {
                   <span>Não informada</span>
                 }
               </div>
               <div>
-                <strong>Primeira observação no Radar:</strong>
-                {{ vagaSelecionada.primeiraObservacaoEm | date:'dd/MM/yyyy HH:mm' }}
+                <strong>Encontrada em:</strong>
+                {{ vagaSelecionada.primeiraObservacaoEm | saoPauloData }}
               </div>
               <div>
                 <strong>Última observação bem-sucedida:</strong>
-                {{ vagaSelecionada.ultimaObservacaoEm | date:'dd/MM/yyyy HH:mm' }}
+                {{ vagaSelecionada.ultimaObservacaoEm | saoPauloData }}
               </div>
               <div>
                 <strong>Última atualização na fonte:</strong>
                 @if (vagaSelecionada.atualizadoNaFonteEm) {
-                  <span>{{ vagaSelecionada.atualizadoNaFonteEm | date:'dd/MM/yyyy HH:mm' }}</span>
+                  <span>{{ vagaSelecionada.atualizadoNaFonteEm | saoPauloData }}</span>
                 } @else {
                   <span>Não informada</span>
                 }

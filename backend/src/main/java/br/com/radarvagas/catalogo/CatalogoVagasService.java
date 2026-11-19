@@ -12,8 +12,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -307,23 +309,16 @@ public class CatalogoVagasService {
 			boolean incluirIndisponiveis,
 			boolean bancoTalentos
 	) {
+		return listarVagas(pagina, tamanho, FiltrosCatalogo.de(termo, fornecedor, modoPublicacao,
+				incluirIndisponiveis, bancoTalentos, null, null, null, null, null, null, null));
+	}
+
+	@Transactional(readOnly = true)
+	public PaginaVagasDto listarVagas(int pagina, int tamanho, FiltrosCatalogo filtros) {
 		int paginaSegura = Math.max(0, pagina);
 		int tamanhoSeguro = Math.max(1, Math.min(50, tamanho));
-		String modoPubSeguro = validarModoPublicacao(modoPublicacao);
-		TipoOportunidade tipo = bancoTalentos ? TipoOportunidade.BANCO_DE_TALENTOS : TipoOportunidade.VAGA_ABERTA;
-		String termoLimpo = (termo == null || termo.isBlank()) ? null : termo.trim();
-		String fornecedorLimpo = (fornecedor == null || fornecedor.isBlank() || "TODAS".equalsIgnoreCase(fornecedor))
-				? null
-				: fornecedor.trim();
-
-		Page<Oportunidade> pageResult = oportunidadeRepository.consultarCatalogoPaginado(
-				tipo,
-				incluirIndisponiveis,
-				fornecedorLimpo,
-				modoPubSeguro,
-				termoLimpo,
-				PageRequest.of(paginaSegura, tamanhoSeguro)
-		);
+		Page<Oportunidade> pageResult = oportunidadeRepository.findAll(
+				ConsultaCatalogo.filtrada(filtros, clock.instant()), PageRequest.of(paginaSegura, tamanhoSeguro));
 
 		List<Long> ids = pageResult.getContent().stream().map(Oportunidade::getId).toList();
 		Map<Long, AcaoPessoal> acoesPorOportunidade = ids.isEmpty()
@@ -469,15 +464,18 @@ public class CatalogoVagasService {
 		);
 	}
 
-	private String validarModoPublicacao(String modo) {
-		if (modo == null) {
-			return "TODAS";
-		}
-		String upper = modo.trim().toUpperCase(Locale.ROOT);
-		if ("CONHECIDA".equals(upper) || "DESCONHECIDA".equals(upper)) {
-			return upper;
-		}
-		return "TODAS";
+	@Transactional(readOnly = true)
+	public OpcoesCatalogoDto opcoes() {
+		var tecnologias = new TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER);
+		oportunidadeRepository.combinacoesTecnologias().stream().flatMap(s -> separarLista(s).stream())
+				.forEach(s -> tecnologias.merge(s, s, (a, b) -> a.compareTo(b) <= 0 ? a : b));
+		var fontes = Stream.concat(oportunidadeRepository.fontesPrincipais().stream(),
+				anuncioOrigemRepository.fornecedores().stream()).distinct().sorted().toList();
+		return new OpcoesCatalogoDto(
+				OpcoesCatalogoDto.opcoes(AreaTecnologia.values(), AreaTecnologia::getRotulo),
+				OpcoesCatalogoDto.opcoes(Senioridade.values(), Senioridade::getRotulo),
+				OpcoesCatalogoDto.opcoes(ModalidadeTrabalho.values(), ModalidadeTrabalho::getRotulo),
+				List.copyOf(tecnologias.values()), fontes, !oportunidadeRepository.existsByIdIsNotNull());
 	}
 
 	private String juntarLista(List<String> itens) {

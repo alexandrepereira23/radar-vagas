@@ -100,20 +100,57 @@ Invoke-RestMethod -Method Post "http://127.0.0.1:8080/api/coletas/executar/1"
 Invoke-RestMethod "http://127.0.0.1:8080/api/vagas?page=0&size=15"
 ```
 
+### Filtros e recência
+
+A tela abre em **Últimos 7 dias**, sem restringir área, nível, modalidade, fonte ou candidatura, e exclui ocultas. **Limpar filtros** volta a essa seleção. Use **Qualquer data** para incluir publicações desconhecidas, ou **Somente sem data conhecida** para procurar só essas vagas. A interface mostra **Encontrada em** (não “Publicada em”) quando a fonte não informou a publicação. Horários são exibidos em **America/Sao_Paulo**.
+
+Na API `GET /api/vagas`, os filtros são combinados com AND no banco antes de paginar:
+
+| Parâmetro | Valores e comportamento |
+| --- | --- |
+| `page`, `size` | Página a partir de zero; padrão `0` e `15`, tamanho limitado a `1–50`. |
+| `q`, `localizacao` | Busca livre em cargo, empresa, tecnologia e localização; `localizacao` busca somente no texto de localização armazenado, sem distinguir maiúsculas. |
+| `area`, `senioridade`, `modalidade` | Códigos disponíveis em `GET /api/vagas/opcoes`, incluindo `NAO_INFORMADA`. Omitir para não restringir. |
+| `tecnologia` | Token completo, sem distinguir maiúsculas; `Java` não casa com `JavaScript`. Para `C++` e `C#`, codifique como `C%2B%2B` e `C%23` na URL. |
+| `fonte` | Código do fornecedor; também encontra anúncios secundários sem duplicar vagas. Omitir ou usar `TODAS` para não restringir. |
+| `publicacao` | `TODAS` (padrão da API), `CONHECIDA`, `DESCONHECIDA`, `ULTIMAS_24H`, `ULTIMOS_3_DIAS`, `ULTIMOS_7_DIAS`. |
+| `candidatura` | `TODAS` (padrão), `NAO_CANDIDATADAS`, `CANDIDATADAS`. |
+| `ocultacao` | `EXCLUIR` (padrão), `INCLUIR`, `SOMENTE`. |
+| `incluirIndisponiveis`, `bancoTalentos` | Booleanos, ambos `false` por padrão; bancos de talentos continuam separados das vagas abertas. |
+
+Em modos recentes, a publicação precisa estar entre `agora − 24/72/168 horas` e `agora`, incluindo ambas as bordas. A API usa instantes UTC e captura um único `agora` por consulta; datas futuras, desconhecidas e datas de coleta não contam como publicação recente. `GET /api/vagas/opcoes` retorna opções do catálogo inteiro, mesmo quando uma listagem filtrada não encontra vagas.
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:8080/api/vagas?publicacao=ULTIMOS_7_DIAS&modalidade=REMOTO&tecnologia=C%2B%2B&page=0&size=15'
+Invoke-RestMethod 'http://127.0.0.1:8080/api/vagas?publicacao=DESCONHECIDA&ocultacao=SOMENTE'
+```
+
+### Acompanhar candidaturas e recuperar ocultas
+
+**Abrir candidatura** só navega para o site de origem. Use **Já me candidatei** para confirmar manualmente e **Desfazer marcação** para reverter. Para recuperar uma vaga, selecione **Somente ocultas** em **Visibilidade**, amplie a publicação para **Qualquer data** se necessário, selecione a vaga e clique em **Restaurar**. Ocultar ou restaurar não muda o estado da candidatura.
+
+```powershell
+# Substitua 123 pelo ID exibido pela API.
+Invoke-RestMethod -Method Patch 'http://127.0.0.1:8080/api/vagas/123/acao-pessoal' -ContentType 'application/json' -Body '{"jaMeCandidatei":true}'
+Invoke-RestMethod -Method Patch 'http://127.0.0.1:8080/api/vagas/123/acao-pessoal' -ContentType 'application/json' -Body '{"oculta":false}'
+```
+
+O PATCH aceita um ou ambos os campos como booleanos JSON; omitir um campo preserva seu estado. A resposta contém `jaMeCandidatei`, `oculta`, `candidatadoEm`, `ocultadoEm` e `atualizadoEm`. Repetir um estado não muda suas datas; desfazer limpa a data correspondente. `GET` não cria ações. Entradas inválidas retornam `400` com `detail`, e alterar uma vaga inexistente retorna `404`. Esses controles são para uso local; não exponha a API sem proteção.
+
 ## Testes e build
 
-Os testes usam H2 e servidores HTTP locais efêmeros. O perfil `test` não importa `.env`; propriedades e fontes persistidas são reconstruídas antes de cada método de coleta.
+Os testes usam H2 e servidores HTTP locais efêmeros. O comando abaixo carrega diretamente a configuração de teste, sem importar o `.env` do projeto. Propriedades e fontes persistidas são reconstruídas antes de cada método de coleta.
 
 ```powershell
 # Em backend/, com JAVA_HOME apontando para Java 25
-.\mvnw.cmd clean test
-.\mvnw.cmd test -Dtest=ColetaECatalogoComportamentoTest
-.\mvnw.cmd package -DskipTests
+$env:SPRING_CONFIG_LOCATION = 'classpath:/application-test.yml'
+.\mvnw.cmd -B clean package '-Dsurefire.runOrder=reversealphabetical'
+Remove-Item Env:SPRING_CONFIG_LOCATION
 
 # Em frontend/
-npm ci --no-audit --no-fund
+npm ci
 npm test
 npm run build
 ```
 
-Verificado em 18/11/2026: **30 testes backend aprovados** com ordem inversa das classes, **6 testes da classe isolada aprovados**, JAR gerado no Java **25.0.5**, instalação limpa de **480 pacotes**, **3 testes frontend aprovados** e bundle de produção gerado. V1–V4 passaram no H2 com validação JPA. PostgreSQL 17 não foi exercitado nesta rodada porque o daemon Docker estava indisponível.
+Verificado na Etapa 3: **36 testes backend aprovados** no H2 em ordem inversa (Java **25.0.3**), JAR executável, **7 testes frontend aprovados** e bundle de produção gerado. A integração em **PostgreSQL 17.5** também passou com dados sintéticos: Flyway V1–V4, upgrade V3→V4 e ações persistidas após recarga, recoleta e reinício da API. Veja [STATUS.md](STATUS.md) para as evidências e pendências, incluindo a revalidação da paginação autenticada real de Adzuna e Jooble.

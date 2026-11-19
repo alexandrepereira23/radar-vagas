@@ -122,12 +122,54 @@ export interface StatusColetaGlobal {
   fontesParciais?: number;
 }
 
-export interface ParametrosConsultaVagas {
+export type Publicacao = 'TODAS' | 'CONHECIDA' | 'DESCONHECIDA'
+  | 'ULTIMAS_24H' | 'ULTIMOS_3_DIAS' | 'ULTIMOS_7_DIAS';
+export type Candidatura = 'TODAS' | 'NAO_CANDIDATADAS' | 'CANDIDATADAS';
+export type Ocultacao = 'EXCLUIR' | 'INCLUIR' | 'SOMENTE';
+
+export interface FiltrosVagas {
+  q: string;
+  fonte: string;
+  area: string;
+  senioridade: string;
+  modalidade: string;
+  tecnologia: string;
+  localizacao: string;
+  publicacao: Publicacao;
+  candidatura: Candidatura;
+  ocultacao: Ocultacao;
+  incluirIndisponiveis: boolean;
+  bancoTalentos: boolean;
+}
+
+export interface ParametrosConsultaVagas extends FiltrosVagas {
   page: number;
   size: number;
-  q?: string;
-  fonte?: string;
-  publicacao?: 'TODAS' | 'CONHECIDA' | 'DESCONHECIDA';
-  incluirIndisponiveis?: boolean;
-  bancoTalentos?: boolean;
+}
+
+export interface OpcaoClassificacao {
+  codigo: string;
+  rotulo: string;
+}
+
+export interface OpcoesVagas {
+  areas: OpcaoClassificacao[];
+  senioridades: OpcaoClassificacao[];
+  modalidades: OpcaoClassificacao[];
+  tecnologias: string[];
+  fontes: string[];
+  catalogoVazio: boolean;
+}
+
+export interface AlteracaoAcaoPessoal {
+  jaMeCandidatei?: boolean;
+  oculta?: boolean;
+}
+
+export interface EstadoAcaoPessoal {
+  jaMeCandidatei: boolean;
+  oculta: boolean;
+  candidatadoEm: string | null;
+  ocultadoEm: string | null;
+  atualizadoEm: string;
 }

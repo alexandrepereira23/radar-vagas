@@ -2,7 +2,10 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
+  AlteracaoAcaoPessoal,
+  EstadoAcaoPessoal,
   ExecucaoColeta,
+  OpcoesVagas,
   PaginaVagas,
   ParametrosConsultaVagas,
   StatusColetaGlobal,
@@ -21,18 +24,28 @@ export class RadarApiService {
     let httpParams = new HttpParams()
       .set('page', String(params.page))
       .set('size', String(params.size))
-      .set('publicacao', params.publicacao ?? 'TODAS')
-      .set('incluirIndisponiveis', String(Boolean(params.incluirIndisponiveis)))
-      .set('bancoTalentos', String(Boolean(params.bancoTalentos)));
+      .set('publicacao', params.publicacao)
+      .set('candidatura', params.candidatura)
+      .set('ocultacao', params.ocultacao)
+      .set('incluirIndisponiveis', params.incluirIndisponiveis)
+      .set('bancoTalentos', params.bancoTalentos);
 
-    if (params.q && params.q.trim().length > 0) {
-      httpParams = httpParams.set('q', params.q.trim());
-    }
-    if (params.fonte && params.fonte.trim().length > 0 && params.fonte !== 'TODAS') {
-      httpParams = httpParams.set('fonte', params.fonte.trim());
+    for (const campo of ['q', 'fonte', 'area', 'senioridade', 'modalidade', 'tecnologia', 'localizacao'] as const) {
+      const valor = campo === 'tecnologia' ? params[campo] : params[campo].trim();
+      if (valor && !(campo === 'fonte' && valor === 'TODAS')) {
+        httpParams = httpParams.set(campo, valor);
+      }
     }
 
     return this.http.get<PaginaVagas>(`${this.apiUrl}/vagas`, { params: httpParams });
+  }
+
+  consultarOpcoesVagas(): Observable<OpcoesVagas> {
+    return this.http.get<OpcoesVagas>(`${this.apiUrl}/vagas/opcoes`);
+  }
+
+  atualizarAcaoPessoal(id: number, alteracao: AlteracaoAcaoPessoal): Observable<EstadoAcaoPessoal> {
+    return this.http.patch<EstadoAcaoPessoal>(`${this.apiUrl}/vagas/${id}/acao-pessoal`, alteracao);
   }
 
   buscarDetalheVaga(id: number): Observable<VagaDetalhe> {

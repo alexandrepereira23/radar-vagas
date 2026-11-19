@@ -1,27 +1,55 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { RadarApiService } from './services/radar-api.service';
+import { SaoPauloDataPipe } from './sao-paulo-data.pipe';
 import {
+  EstadoAcaoPessoal,
   ExecucaoColeta,
+  FiltrosVagas,
   FonteConfigurada,
+  OpcoesVagas,
   PaginaVagas,
+  Publicacao,
   StatusColetaGlobal,
   VagaDetalhe,
   VagaResumo
 } from './models/vaga.model';
 
+const FILTROS_INICIAIS: FiltrosVagas = {
+  q: '', fonte: '', area: '', senioridade: '', modalidade: '', tecnologia: '', localizacao: '',
+  publicacao: 'ULTIMOS_7_DIAS', candidatura: 'TODAS', ocultacao: 'EXCLUIR',
+  incluirIndisponiveis: false, bancoTalentos: false
+};
+
+const ROTULOS_PUBLICACAO: Record<Publicacao, string> = {
+  ULTIMAS_24H: 'Últimas 24 horas',
+  ULTIMOS_3_DIAS: 'Últimos 3 dias',
+  ULTIMOS_7_DIAS: 'Últimos 7 dias',
+  TODAS: 'Qualquer data (inclui sem data)',
+  CONHECIDA: 'Somente com data conhecida',
+  DESCONHECIDA: 'Somente sem data conhecida'
+};
+
+const FONTES_ANTERIORES = ['GITHUB_ISSUES', 'GUPY_PORTAL', 'GREENHOUSE_BOARD', 'ASHBY_BOARD', 'JOOBLE_API', 'ADZUNA_API'];
+
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule, SaoPauloDataPipe],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
 })
 export class AppComponent implements OnInit {
   paginaVagas: PaginaVagas | null = null;
   vagaSelecionada: VagaDetalhe | null = null;
+  idSelecionado: number | null = null;
   statusColeta: StatusColetaGlobal | null = null;
+  opcoesVagas: OpcoesVagas | null = null;
+  fontesFiltro = FONTES_ANTERIORES;
+  tecnologiasFiltro: string[] = [];
+  readonly publicacoes = Object.entries(ROTULOS_PUBLICACAO);
 
   carregandoLista = false;
   carregandoDetalhe = false;
@@ -29,66 +57,104 @@ export class AppComponent implements OnInit {
   exibirDiagnosticoColeta = false;
 
   erroCarregamento: string | null = null;
+  erroDetalhe: string | null = null;
+  erroOpcoes: string | null = null;
+  erroStatus: string | null = null;
+  erroAcao: string | null = null;
+  mensagemAcao: string | null = null;
   erroColeta: string | null = null;
   mensagemColeta: string | null = null;
 
-  // Parâmetros de consulta paginada no servidor
+  readonly acoesPendentes = new Set<number>();
+  private acaoConfirmada: { id: number; estado: EstadoAcaoPessoal } | null = null;
+  private readonly destroyRef = inject(DestroyRef);
+  private consultaLista?: Subscription;
+  private consultaDetalhe?: Subscription;
+  private consultaOpcoes?: Subscription;
+  private consultaStatus?: Subscription;
+
   paginaAtual = 0;
   tamanhoPagina = 15;
-  termoBusca = '';
-  filtroFonte = 'TODAS';
-  filtroPublicacao: 'TODAS' | 'CONHECIDA' | 'DESCONHECIDA' = 'TODAS';
-  incluirIndisponiveis = false;
-  bancoTalentos = false;
+  filtros = { ...FILTROS_INICIAIS };
+  private filtrosAplicados = { ...FILTROS_INICIAIS };
 
   constructor(private readonly api: RadarApiService) {}
 
   ngOnInit(): void {
     this.carregarStatusColeta();
+    this.carregarOpcoesVagas();
     this.carregarVagas(0);
   }
 
   carregarStatusColeta(): void {
-    this.api.consultarStatusColeta().subscribe({
+    this.consultaStatus?.unsubscribe();
+    this.erroStatus = null;
+    this.consultaStatus = this.api.consultarStatusColeta().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (status) => {
         this.statusColeta = status;
       },
       error: () => {
-        this.erroCarregamento = 'Não foi possível consultar o status de coleta no backend local.';
+        this.erroStatus = 'Não foi possível consultar o status de coleta no backend local.';
       }
     });
   }
 
+  carregarOpcoesVagas(): void {
+    this.consultaOpcoes?.unsubscribe();
+    this.erroOpcoes = null;
+    this.consultaOpcoes = this.api.consultarOpcoesVagas().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (opcoes) => {
+        this.opcoesVagas = opcoes;
+        this.fontesFiltro = [...new Set([...FONTES_ANTERIORES, ...opcoes.fontes, this.filtros.fonte])].filter(Boolean);
+        this.tecnologiasFiltro = [...new Set([...opcoes.tecnologias, this.filtros.tecnologia])].filter(Boolean);
+      },
+      error: () => {
+        this.erroOpcoes = 'Não foi possível atualizar as opções de filtros.';
+      }
+    });
+  }
+
+  get periodoAplicado(): string {
+    return ROTULOS_PUBLICACAO[this.filtrosAplicados.publicacao];
+  }
+
   carregarVagas(pagina: number): void {
+    this.consultaLista?.unsubscribe();
+    this.consultaDetalhe?.unsubscribe();
+    this.carregandoDetalhe = false;
+    this.erroDetalhe = null;
     this.carregandoLista = true;
     this.erroCarregamento = null;
     this.paginaAtual = Math.max(0, pagina);
 
-    this.api
+    this.consultaLista = this.api
       .listarVagas({
+        ...this.filtrosAplicados,
         page: this.paginaAtual,
-        size: this.tamanhoPagina,
-        q: this.termoBusca,
-        fonte: this.filtroFonte,
-        publicacao: this.filtroPublicacao,
-        incluirIndisponiveis: this.incluirIndisponiveis,
-        bancoTalentos: this.bancoTalentos
+        size: this.tamanhoPagina
       })
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
+          const ultimaPagina = Math.max(0, res.totalPaginas - 1);
+          if (pagina > ultimaPagina) {
+            this.carregarVagas(ultimaPagina);
+            return;
+          }
           this.paginaVagas = res;
           this.carregandoLista = false;
-          if (res.itens.length > 0) {
-            const aindaNaPagina =
-              this.vagaSelecionada && res.itens.some((v) => v.id === this.vagaSelecionada?.id);
-            if (!aindaNaPagina) {
-              this.selecionarVaga(res.itens[0]);
-            }
+          const vaga = res.itens.find((v) => v.id === this.idSelecionado) ?? res.itens[0];
+          if (!vaga) {
+            this.limparSelecao();
+          } else if (this.vagaSelecionada?.id === vaga.id) {
+            // O total e a participação da vaga na página vêm sempre da nova consulta.
+            this.vagaSelecionada = { ...this.vagaSelecionada, ...vaga };
           } else {
-            this.vagaSelecionada = null;
+            this.selecionarVaga(vaga);
           }
         },
         error: () => {
+          this.paginaVagas = null;
           this.carregandoLista = false;
           this.erroCarregamento =
             'Falha ao consultar o catálogo de vagas no backend local. Verifique se a API está em execução.';
@@ -97,20 +163,18 @@ export class AppComponent implements OnInit {
   }
 
   aplicarFiltros(): void {
+    this.filtrosAplicados = { ...this.filtros };
     this.carregarVagas(0);
   }
 
   limparFiltros(): void {
-    this.termoBusca = '';
-    this.filtroFonte = 'TODAS';
-    this.filtroPublicacao = 'TODAS';
-    this.incluirIndisponiveis = false;
-    this.bancoTalentos = false;
-    this.carregarVagas(0);
+    this.filtros = { ...FILTROS_INICIAIS };
+    this.tamanhoPagina = 15;
+    this.aplicarFiltros();
   }
 
   irParaPagina(novaPagina: number): void {
-    if (!this.paginaVagas) {
+    if (!this.paginaVagas || this.carregandoLista) {
       return;
     }
     if (novaPagina < 0 || novaPagina >= this.paginaVagas.totalPaginas) {
@@ -124,16 +188,63 @@ export class AppComponent implements OnInit {
   }
 
   selecionarVaga(vaga: VagaResumo): void {
+    this.limparSelecao();
+    this.idSelecionado = vaga.id;
     this.carregandoDetalhe = true;
-    this.api.buscarDetalheVaga(vaga.id).subscribe({
+    this.consultaDetalhe = this.api.buscarDetalheVaga(vaga.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (detalhe) => {
         this.vagaSelecionada = detalhe;
         this.carregandoDetalhe = false;
       },
       error: () => {
         this.carregandoDetalhe = false;
+        this.erroDetalhe = `Não foi possível carregar os detalhes de ${vaga.cargo}. Selecione a vaga para tentar novamente.`;
       }
     });
+  }
+
+  private limparSelecao(): void {
+    this.consultaDetalhe?.unsubscribe();
+    this.idSelecionado = null;
+    this.vagaSelecionada = null;
+    this.carregandoDetalhe = false;
+    this.erroDetalhe = null;
+  }
+
+  get datasAcaoSelecionada(): EstadoAcaoPessoal | null {
+    const acao = this.acaoConfirmada;
+    return acao && acao.id === this.vagaSelecionada?.id ? acao.estado : null;
+  }
+
+  alterarAcao(vaga: VagaResumo, campo: 'jaMeCandidatei' | 'oculta'): void {
+    const { id, cargo } = vaga;
+    if (this.acoesPendentes.has(id)) {
+      return;
+    }
+    this.acoesPendentes.add(id);
+    this.erroAcao = null;
+    this.mensagemAcao = null;
+    this.api.atualizarAcaoPessoal(id, { [campo]: !vaga[campo] })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (estado) => {
+          this.acoesPendentes.delete(id);
+          const { jaMeCandidatei, oculta } = estado;
+          const estadosPessoais = { jaMeCandidatei, oculta };
+          if (this.vagaSelecionada?.id === id) {
+            this.vagaSelecionada = { ...this.vagaSelecionada, ...estadosPessoais };
+            this.acaoConfirmada = { id, estado };
+          }
+          this.mensagemAcao = campo === 'oculta'
+            ? `${cargo}: ${oculta ? 'vaga ocultada' : 'vaga restaurada'}.`
+            : `${cargo}: ${jaMeCandidatei ? 'candidatura marcada' : 'marcação de candidatura desfeita'}.`;
+          this.carregarVagas(this.paginaAtual);
+        },
+        error: () => {
+          this.acoesPendentes.delete(id);
+          this.erroAcao = `Não foi possível salvar a ação para ${cargo}. Tente novamente.`;
+        }
+      });
   }
 
   dispararColetaManual(): void {
@@ -144,7 +255,7 @@ export class AppComponent implements OnInit {
     this.erroColeta = null;
     this.mensagemColeta = null;
 
-    this.api.executarColetaManual().subscribe({
+    this.api.executarColetaManual().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (execucoes: ExecucaoColeta[]) => {
         this.executandoColeta = false;
         const novos = execucoes.reduce((acc, e) => acc + e.anunciosNovos, 0);
@@ -154,6 +265,7 @@ export class AppComponent implements OnInit {
 
         this.mensagemColeta = `Coleta concluída em ${execucoes.length} fonte(s) ativa(s): ${novos} novo(s), ${atualizados} atualizado(s), ${repetidos} repetido(s), ${erros} erro(s).`;
         this.carregarStatusColeta();
+        this.carregarOpcoesVagas();
         this.carregarVagas(this.paginaAtual);
       },
       error: () => {
@@ -172,11 +284,12 @@ export class AppComponent implements OnInit {
     this.erroColeta = null;
     this.mensagemColeta = null;
 
-    this.api.executarFonteIndividual(fonte.id).subscribe({
+    this.api.executarFonteIndividual(fonte.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (exec: ExecucaoColeta) => {
         this.executandoColeta = false;
         this.mensagemColeta = `Fonte ${fonte.nomeExibicao} (${exec.statusRotulo}): ${exec.anunciosRecebidos} recebido(s), ${exec.anunciosValidos} válido(s), ${exec.anunciosNovos} novo(s), ${exec.errosContagem} erro(s).`;
         this.carregarStatusColeta();
+        this.carregarOpcoesVagas();
         this.carregarVagas(this.paginaAtual);
       },
       error: () => {

@@ -29,17 +29,22 @@ public class CatalogoVagasController {
 			@RequestParam(required = false) String fonte,
 			@RequestParam(defaultValue = "TODAS") String publicacao,
 			@RequestParam(defaultValue = "false") boolean incluirIndisponiveis,
-			@RequestParam(defaultValue = "false") boolean bancoTalentos
+			@RequestParam(defaultValue = "false") boolean bancoTalentos,
+			@RequestParam(required = false) String area,
+			@RequestParam(required = false) String senioridade,
+			@RequestParam(required = false) String modalidade,
+			@RequestParam(required = false) String tecnologia,
+			@RequestParam(required = false) String localizacao,
+			@RequestParam(required = false) String candidatura,
+			@RequestParam(required = false) String ocultacao
 	) {
-		return catalogoVagasService.listarVagas(
-				page,
-				size,
-				q,
-				fonte,
-				publicacao,
-				incluirIndisponiveis,
-				bancoTalentos
-		);
+		return catalogoVagasService.listarVagas(page, size, FiltrosCatalogo.de(q, fonte, publicacao,
+				incluirIndisponiveis, bancoTalentos, area, senioridade, modalidade, tecnologia, localizacao, candidatura, ocultacao));
+	}
+
+	@GetMapping("/opcoes")
+	public OpcoesCatalogoDto opcoes() {
+		return catalogoVagasService.opcoes();
 	}
 
 	@GetMapping("/{id}")

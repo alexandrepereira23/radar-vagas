@@ -167,6 +167,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .filter-search {
@@ -204,7 +206,24 @@
 
 .filter-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.filter-context,
+.job-technologies {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0.6rem 0 0;
+}
+
+.job-technologies {
+  margin-bottom: 0.6rem;
+}
+
+:is(button, a, input, select):focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
 }
 
 .btn {
@@ -247,9 +266,14 @@
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   gap: 1rem;
   align-items: start;
+}
+
+.workspace-grid > *, .diagnostics-grid > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .list-summary {
@@ -303,6 +327,16 @@
   line-height: 1.35;
 }
 
+.job-title-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  text-align: start;
+  cursor: pointer;
+}
+
 .job-badges {
   display: flex;
   gap: 0.35rem;
@@ -348,6 +382,7 @@
 
 .job-card-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
@@ -362,10 +397,22 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 0.6rem 1rem;
+}
+
+@media (max-width: 540px) {
+  .layout-container {
+    padding-inline: 0.75rem;
+  }
+
+  .filter-group {
+    flex: 1 1 100%;
+  }
 }
 
 .pagination-info {
