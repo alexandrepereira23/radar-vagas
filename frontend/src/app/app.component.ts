@@ -121,7 +121,7 @@ export class AppComponent implements OnInit {
   carregarVagas(pagina: number): void {
     this.consultaLista?.unsubscribe();
     this.consultaDetalhe?.unsubscribe();
-    this.carregandoDetalhe = false;
+    this.carregandoDetalhe = this.idSelecionado !== null && this.vagaSelecionada === null;
     this.erroDetalhe = null;
     this.carregandoLista = true;
     this.erroCarregamento = null;
@@ -156,6 +156,7 @@ export class AppComponent implements OnInit {
         error: () => {
           this.paginaVagas = null;
           this.carregandoLista = false;
+          this.carregandoDetalhe = false;
           this.erroCarregamento =
             'Falha ao consultar o catálogo de vagas no backend local. Verifique se a API está em execução.';
         }
@@ -231,9 +232,11 @@ export class AppComponent implements OnInit {
           this.acoesPendentes.delete(id);
           const { jaMeCandidatei, oculta } = estado;
           const estadosPessoais = { jaMeCandidatei, oculta };
+          if (this.idSelecionado === id) {
+            this.acaoConfirmada = { id, estado };
+          }
           if (this.vagaSelecionada?.id === id) {
             this.vagaSelecionada = { ...this.vagaSelecionada, ...estadosPessoais };
-            this.acaoConfirmada = { id, estado };
           }
           this.mensagemAcao = campo === 'oculta'
             ? `${cargo}: ${oculta ? 'vaga ocultada' : 'vaga restaurada'}.`
@@ -264,9 +267,7 @@ export class AppComponent implements OnInit {
         const erros = execucoes.reduce((acc, e) => acc + e.errosContagem, 0);
 
         this.mensagemColeta = `Coleta concluída em ${execucoes.length} fonte(s) ativa(s): ${novos} novo(s), ${atualizados} atualizado(s), ${repetidos} repetido(s), ${erros} erro(s).`;
-        this.carregarStatusColeta();
-        this.carregarOpcoesVagas();
-        this.carregarVagas(this.paginaAtual);
+        this.recarregarCatalogoAposColeta();
       },
       error: () => {
         this.executandoColeta = false;
@@ -288,9 +289,7 @@ export class AppComponent implements OnInit {
       next: (exec: ExecucaoColeta) => {
         this.executandoColeta = false;
         this.mensagemColeta = `Fonte ${fonte.nomeExibicao} (${exec.statusRotulo}): ${exec.anunciosRecebidos} recebido(s), ${exec.anunciosValidos} válido(s), ${exec.anunciosNovos} novo(s), ${exec.errosContagem} erro(s).`;
-        this.carregarStatusColeta();
-        this.carregarOpcoesVagas();
-        this.carregarVagas(this.paginaAtual);
+        this.recarregarCatalogoAposColeta();
       },
       error: () => {
         this.executandoColeta = false;
@@ -298,6 +297,14 @@ export class AppComponent implements OnInit {
         this.carregarStatusColeta();
       }
     });
+  }
+
+  private recarregarCatalogoAposColeta(): void {
+    // A lista não traz a descrição nem as origens. Mantém o ID para reconsultar o detalhe completo.
+    this.vagaSelecionada = null;
+    this.carregarStatusColeta();
+    this.carregarOpcoesVagas();
+    this.carregarVagas(this.paginaAtual);
   }
 
   alternarDiagnostico(): void {

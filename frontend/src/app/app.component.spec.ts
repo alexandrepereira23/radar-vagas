@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { AppComponent } from './app.component';
-import { EstadoAcaoPessoal, OpcoesVagas, PaginaVagas, StatusColetaGlobal, VagaDetalhe, VagaResumo } from './models/vaga.model';
+import { AnuncioOrigem, EstadoAcaoPessoal, FonteConfigurada, OpcoesVagas, PaginaVagas, StatusColetaGlobal, VagaDetalhe, VagaResumo } from './models/vaga.model';
 
 const opcoes: OpcoesVagas = {
   areas: [{ codigo: 'DESENVOLVIMENTO', rotulo: 'Desenvolvimento' }],
@@ -307,8 +307,8 @@ describe('AppComponent — Comportamento da Tela Inicial e Integração com API'
     };
   }
 
-  function detalhar(resumo: VagaResumo): void {
-    const detalhe: VagaDetalhe = { ...resumo, descricao: `Descrição ${resumo.id}`, anunciosOrigem: [] };
+  function detalhar(resumo: VagaResumo, descricao = `Descrição ${resumo.id}`, anunciosOrigem: AnuncioOrigem[] = []): void {
+    const detalhe: VagaDetalhe = { ...resumo, descricao, anunciosOrigem };
     httpMock.expectOne(`/api/vagas/${resumo.id}`).flush(detalhe);
   }
 
@@ -330,13 +330,13 @@ describe('AppComponent — Comportamento da Tela Inicial e Integração com API'
     controle.dispatchEvent(new Event(controle instanceof HTMLInputElement && controle.type === 'text' ? 'input' : 'change'));
   }
 
-  async function abrir(inicial: PaginaVagas = pagina()): Promise<ComponentFixture<AppComponent>> {
+  async function abrir(inicial: PaginaVagas = pagina(), fontes: FonteConfigurada[] = [], origens: AnuncioOrigem[] = []): Promise<ComponentFixture<AppComponent>> {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
-    httpMock.expectOne('/api/coletas/status').flush({ fontes: [], ultimasExecucoes: [] });
+    httpMock.expectOne('/api/coletas/status').flush({ fontes, ultimasExecucoes: [] });
     responderOpcoes();
     consultaLista(0).flush(inicial);
-    if (inicial.itens[0]) detalhar(inicial.itens[0]);
+    if (inicial.itens[0]) detalhar(inicial.itens[0], undefined, origens);
     fixture.detectChanges();
     await fixture.whenStable();
     return fixture;
@@ -545,5 +545,110 @@ describe('AppComponent — Comportamento da Tela Inicial e Integração com API'
     expect(elemento(fixture, 'erro-carregamento')).not.toBeNull();
     expect(elemento(fixture, 'erro-detalhe')).toBeNull();
     expect(elemento(fixture, 'estado-vazio')).toBeNull();
+  });
+
+  const fonteColeta: FonteConfigurada = {
+    id: 7, fornecedor: 'GITHUB_ISSUES', identificadorMural: 'origem-inicial', nomeExibicao: 'GitHub',
+    ativo: true, cadenciaMinutos: 360, ultimaColetaSucessoEm: null, cursorUltimaAtualizacao: null
+  };
+
+  function concluirColeta(fixture: ComponentFixture<AppComponent>, individual = false): void {
+    if (individual) {
+      elemento(fixture, 'btn-diagnostico').click();
+      fixture.detectChanges();
+      const botao = [...elDaFixture(fixture).querySelectorAll('button')]
+        .find((b) => b.textContent?.includes('Coletar esta fonte'))!;
+      botao.click();
+    } else {
+      elemento(fixture, 'btn-coletar-agora').click();
+    }
+    const resultado = { statusRotulo: 'Sucesso', anunciosRecebidos: 1, anunciosValidos: 1,
+      anunciosNovos: 0, anunciosAtualizados: 1, anunciosRepetidos: 0, errosContagem: 0 };
+    const req = httpMock.expectOne(individual ? '/api/coletas/executar/7' : '/api/coletas/executar');
+    expect(req.request.method).toBe('POST');
+    req.flush(individual ? resultado : [resultado]);
+    httpMock.expectOne('/api/coletas/status').flush({ fontes: [fonteColeta], ultimasExecucoes: [] });
+    responderOpcoes();
+  }
+
+  const origemInicial: AnuncioOrigem = {
+    id: 1, fornecedor: 'GITHUB_ISSUES', identificadorMural: 'origem-inicial', identificadorExterno: '1',
+    tituloOriginal: 'Anúncio', labelsOriginais: [], urlOrigem: 'https://example.invalid/anuncio',
+    urlCandidatura: 'https://example.invalid/candidatar', disponibilidadeCodigo: 'DISPONIVEL',
+    disponibilidadeRotulo: 'Disponível', motivoIndisponibilidade: null, publicadoNaFonteEm: null,
+    atualizadoNaFonteEm: null, primeiraObservacaoEm: dataAcao, ultimaObservacaoEm: dataAcao
+  };
+
+  for (const individual of [false, true]) {
+    it(`revalida descrição e origens do mesmo ID após coleta ${individual ? 'individual' : 'geral'}`, async () => {
+      const inicial = { ...vaga(1), jaMeCandidatei: true };
+      const fixture = await abrir(pagina([inicial]), [fonteColeta], [origemInicial]);
+      expect(elemento(fixture, 'descricao-vaga').textContent).toBe('Descrição 1');
+      expect(elDaFixture(fixture).querySelectorAll('.origins-list li')).toHaveLength(1);
+
+      concluirColeta(fixture, individual);
+      const atualizada = { ...inicial, cargo: 'Cargo atualizado', quantidadeAnunciosOrigem: 2 };
+      consultaLista(0).flush(pagina([atualizada]));
+      const revalidacao = httpMock.expectOne('/api/vagas/1');
+      fixture.detectChanges();
+      expect(elemento(fixture, 'btn-ver-detalhe').getAttribute('aria-current')).toBe('true');
+      expect(elemento(fixture, 'painel-detalhes').textContent).toContain('Carregando detalhes');
+      expect(elemento(fixture, 'descricao-vaga')).toBeNull();
+
+      revalidacao.flush({ ...atualizada, descricao: 'Descrição atualizada', anunciosOrigem: [origemInicial,
+        { ...origemInicial, id: 2, fornecedor: 'LEVER_BOARD', identificadorMural: 'origem-adicional' }] });
+      fixture.detectChanges();
+      expect(elemento(fixture, 'painel-detalhes').querySelector('h2')?.textContent).toBe('Cargo atualizado');
+      expect(elemento(fixture, 'descricao-vaga').textContent).toBe('Descrição atualizada');
+      expect([...elDaFixture(fixture).querySelectorAll('.origins-list li')].map((li) => li.textContent))
+        .toEqual([expect.stringContaining('origem-inicial'), expect.stringContaining('origem-adicional')]);
+      expect(elemento(fixture, 'btn-marcar-candidatura').textContent).toContain('Desfazer marcação');
+    });
+  }
+
+  it('não mantém o detalhe antigo após falha na revalidação e permite tentar novamente pelo card', async () => {
+    const primeira = vaga(1);
+    const fixture = await abrir(pagina([primeira]));
+    concluirColeta(fixture);
+    consultaLista(0).flush(pagina([primeira]));
+    httpMock.expectOne('/api/vagas/1').flush(null, { status: 500, statusText: 'Erro' });
+    fixture.detectChanges();
+    expect(elemento(fixture, 'erro-detalhe').textContent).toContain('Vaga 1');
+    expect(elemento(fixture, 'descricao-vaga')).toBeNull();
+    elemento(fixture, 'btn-ver-detalhe').click();
+    detalhar(primeira, 'Descrição recuperada');
+    fixture.detectChanges();
+    expect(elemento(fixture, 'erro-detalhe')).toBeNull();
+    expect(elemento(fixture, 'descricao-vaga').textContent).toBe('Descrição recuperada');
+  });
+
+  it('cancela a revalidação ao trocar de vaga sem perder uma candidatura confirmada durante a coleta', async () => {
+    const primeira = vaga(1);
+    const segunda = vaga(2);
+    const fixture = await abrir(pagina([primeira, segunda]));
+    elemento(fixture, 'btn-marcar-candidatura').click();
+    const acao = httpMock.expectOne('/api/vagas/1/acao-pessoal');
+    concluirColeta(fixture);
+    consultaLista(0).flush(pagina([primeira, segunda]));
+    const detalheAntesDoPatch = httpMock.expectOne('/api/vagas/1');
+
+    acao.flush(estadoAcao(true, false));
+    expect(detalheAntesDoPatch.cancelled).toBe(true);
+    const marcada = { ...primeira, jaMeCandidatei: true };
+    consultaLista(0).flush(pagina([marcada, segunda]));
+    const detalheAntesDaTroca = httpMock.expectOne('/api/vagas/1');
+    fixture.detectChanges();
+    const cards = elDaFixture(fixture).querySelectorAll<HTMLButtonElement>('[data-testid="btn-ver-detalhe"]');
+    cards[1].click();
+    expect(detalheAntesDaTroca.cancelled).toBe(true);
+    detalhar(segunda);
+    fixture.detectChanges();
+    expect(elemento(fixture, 'descricao-vaga').textContent).toBe('Descrição 2');
+    expect(elemento(fixture, 'selo-candidatura').textContent).toContain('Já me candidatei');
+
+    cards[0].click();
+    detalhar(marcada);
+    fixture.detectChanges();
+    expect(elemento(fixture, 'candidatura-detalhe').textContent).toMatch(/Já me candidatei.*16:00/s);
   });
 });

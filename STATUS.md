@@ -1,6 +1,6 @@
 # STATUS — Radar de Vagas
 
-Última atualização: 19/11/2026 — Etapa 3, consulta diária e ações pessoais.
+Última atualização: 19/11/2026 — revisão da Etapa 3, atualização do detalhe após coleta.
 
 ## Etapa atual
 
@@ -29,6 +29,13 @@
 Os seis testes novos do backend cobrem filtros antes da paginação, origem secundária sem duplicatas, limites inclusivos das três janelas, tokens de tecnologia com pontuação, estados ausentes, ações independentes e concorrentes, nova ingestão e entradas inválidas. O `.env` do projeto não foi lido; a regressão de importação usa seu próprio arquivo temporário com valores fictícios. Nenhuma coleta autenticada real foi chamada.
 
 A integração usou duas vagas sintéticas de um servidor GitHub local: a primeira coleta importou duas vagas; a recoleta retornou duas repetidas, zero novas e zero erros. O teste final usou as classes e dependências extraídas do JAR, após timeouts intermitentes com `java -jar`. Os serviços descartáveis foram encerrados. Logs, resultado, trace e capturas locais estão em `%LOCALAPPDATA%\Temp\opencode\radar-etapa3-it-51648`.
+
+### Revisão da Etapa 3 — detalhe após coleta
+
+- Antes, quando a vaga permanecia na página, a tela mesclava o novo resumo com o detalhe antigo. Isso podia atualizar o cargo sem atualizar a descrição e os anúncios de origem.
+- As coletas geral e individual agora invalidam o detalhe pelo mesmo caminho. Se a vaga ainda estiver na página, a seleção é mantida e o detalhe completo é buscado novamente na API. Em caso de falha, o painel mostra o erro sem manter conteúdo antigo; selecionar o card novamente permite tentar de novo.
+- As requisições de detalhe obsoletas continuam sendo canceladas ao trocar de vaga ou ao confirmar uma ação pessoal, evitando que a resposta anterior sobrescreva o estado mais recente.
+- **Verificado nesta revisão:** antes da correção, os quatro casos novos falharam pela ausência do GET de detalhe, e os sete existentes passaram. Depois, `npm test` passou com **11 testes** e `npm run build` gerou o bundle de produção. Os testes usam respostas HTTP simuladas. Backend, PostgreSQL e fornecedores reais não foram revalidados nesta revisão, que alterou apenas frontend e documentação.
 
 ## Histórico: correções da revisão 02
 
